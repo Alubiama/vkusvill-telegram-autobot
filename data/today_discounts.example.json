@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Йогурт греческий",
+    "price": 129,
+    "discount_price": 99,
+    "source": "manual_seed"
+  },
+  {
+    "name": "Филе куриное",
+    "price": 399,
+    "discount_price": 299,
+    "source": "manual_seed"
+  },
+  {
+    "name": "Сыр гауда",
+    "price": 269,
+    "discount_price": 209,
+    "source": "manual_seed"
+  },
+  {
+    "name": "Кефир 1%",
+    "price": 99,
+    "discount_price": 79,
+    "source": "manual_seed"
+  },
+  {
+    "name": "Творог 5%",
+    "price": 139,
+    "discount_price": 109,
+    "source": "manual_seed"
+  },
+  {
+    "name": "Бананы",
+    "price": 119,
+    "discount_price": 89,
+    "source": "manual_seed"
+  }
+]

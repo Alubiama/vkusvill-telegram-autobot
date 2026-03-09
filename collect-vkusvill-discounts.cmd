@@ -1,0 +1,21 @@
+@echo off
+setlocal
+
+cd /d %~dp0
+
+if not exist ".venv\Scripts\python.exe" (
+  echo venv not found. Run start/auth first.
+  exit /b 1
+)
+
+if not exist "data\chrome-user-data\Default" (
+  echo Initializing local automation Chrome profile...
+  echo Close all regular Chrome windows and press any key.
+  pause >nul
+  ".venv\Scripts\python.exe" scripts\clone_chrome_profile.py --profile-name "auto" --dst-root "data/chrome-user-data"
+  if errorlevel 1 exit /b %errorlevel%
+)
+
+echo Running discount collection from automation profile...
+".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "auto" --interactive-login --out-file data\today_discounts.json
+exit /b %errorlevel%

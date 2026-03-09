@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtual environment
+.venv/
+
+# Secrets
+.env
+
+# Runtime data and artifacts
+data/state.db
+data/today_discounts.json
+data/chrome-user-data/
+data/chromium-profile/
+data/vkusvill_storage_state.json
+out/
+
+# Local OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
