@@ -61,12 +61,34 @@
     .section-title {
       font-size: 18px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .section-sub {
       color: var(--muted);
       font-size: 13px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 10px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
     .items {
       display: grid;
@@ -99,37 +121,22 @@
     .price-label { font-size: 12px; color: var(--muted); }
     .price-val { font-size: 18px; font-weight: 700; }
     .discount { color: var(--ok); }
-    .meta {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .meta-box {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 7px 8px;
-      font-size: 13px;
-      background: #fff;
-    }
-    .controls {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 6px;
-    }
-    button {
+    .toggle {
+      width: 100%;
       border: 1px solid var(--line);
       border-radius: 10px;
       background: #fff;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
-      padding: 8px 6px;
+      padding: 10px 8px;
       cursor: pointer;
     }
-    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.warn { background: #fdf3eb; color: #7c3c1a; }
-    button.send { grid-column: span 2; }
+    .toggle.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
     .actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -139,15 +146,26 @@
       background: linear-gradient(180deg, rgba(255, 247, 220, 0), rgba(255, 247, 220, 0.95) 28%);
       padding-top: 10px;
     }
+    .action-btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 700;
+      padding: 10px 8px;
+      cursor: pointer;
+    }
+    .action-btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
     .empty {
       text-align: center;
       color: var(--muted);
       padding: 20px 10px;
       line-height: 1.35;
-    }
-    @media (max-width: 520px) {
-      .controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      button.send { grid-column: span 3; }
     }
   </style>
 </head>
@@ -163,13 +181,19 @@
 
     <section class="card">
       <div class="section-title">Товары на сегодня</div>
-      <div class="section-sub">Сначала идут подборки по 6, затем любимый товар (если есть).</div>
-      <div id="groups"></div>
+      <div class="section-sub">Выбери нужные товары и отправь одним нажатием.</div>
+      <div id="tabs" class="tabs"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-title" id="groupTitle">-</div>
+      <div class="section-sub" id="groupSub">-</div>
+      <div id="items" class="items"></div>
     </section>
 
     <section class="actions">
-      <button class="primary" id="sendAllBtn">Отправить весь выбор</button>
-      <button id="closeBtn">Закрыть</button>
+      <button class="action-btn primary" id="sendAllBtn">Отправить выбор</button>
+      <button class="action-btn" id="closeBtn">Закрыть</button>
     </section>
   </div>
 
@@ -197,6 +221,7 @@
     const params = new URLSearchParams(window.location.search);
     const hasDataParam = params.has("data");
     const payload = decodeBase64UrlJson(params.get("data")) || {};
+
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const day = payload.day || today;
@@ -210,18 +235,17 @@
       source: String(x.s || x.source || ""),
     })).filter((x) => x.item_id && x.name) : [];
 
-    const groupTotals = payload.totals || {};
-    const qty = {};
+    const selected = {};
     for (const item of items) {
       const initial = Number((payload.your || {})[item.item_id] || 0);
-      qty[item.item_id] = Number.isFinite(initial) ? Math.max(0, initial) : 0;
+      selected[item.item_id] = initial > 0 ? 1 : 0;
     }
 
     function rub(value) {
       return `${Number(value).toFixed(2)} RUB`;
     }
 
-    function allGroups() {
+    function buildGroups() {
       const favorites = [];
       const regular = [];
       for (const item of items) {
@@ -230,120 +254,71 @@
         else regular.push(item);
       }
 
-      const result = [];
+      const groups = [];
       for (let i = 0; i < regular.length; i += 6) {
         const slice = regular.slice(i, i + 6);
-        result.push({
+        groups.push({
+          key: `g${Math.floor(i / 6) + 1}`,
           title: `Подборка ${Math.floor(i / 6) + 1}`,
           subtitle: `${slice.length} товаров`,
           items: slice,
         });
       }
       if (favorites.length) {
-        result.push({
-          title: "Любимый продукт",
+        groups.push({
+          key: "fav",
+          title: "Любимый товар",
           subtitle: `${favorites.length} товаров`,
           items: favorites,
         });
       }
-      return result;
+      return groups;
     }
 
+    const groups = buildGroups();
+    let activeGroupIdx = 0;
+
     function selectedCount() {
-      return Object.values(qty).reduce((acc, n) => acc + Number(n || 0), 0);
+      return Object.values(selected).reduce((acc, n) => acc + Number(n || 0), 0);
     }
 
     function updateSummary() {
-      const picked = selectedCount();
-      document.getElementById("summary").textContent = `Выбрано: ${picked}`;
+      document.getElementById("summary").textContent = `Выбрано: ${selectedCount()}`;
     }
 
-    function changeBy(itemId, delta) {
-      qty[itemId] = Math.max(0, Number(qty[itemId] || 0) + delta);
-      render();
-    }
-
-    function resetOne(itemId) {
-      qty[itemId] = 0;
-      render();
-    }
-
-    function sendSingle(itemId) {
-      const payloadOut = {
-        type: "single_choice",
-        day,
-        item_id: itemId,
-        qty: Number(qty[itemId] || 0),
-      };
-      tg?.sendData(JSON.stringify(payloadOut));
-    }
-
-    function sendAll() {
-      const payloadOut = { type: "all_choices", day, qty };
-      tg?.sendData(JSON.stringify(payloadOut));
-      tg?.close();
-    }
-
-    function renderItem(item) {
-      const wrap = document.createElement("article");
-      wrap.className = "item";
-
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = item.name;
-      wrap.appendChild(name);
-
-      const prices = document.createElement("div");
-      prices.className = "price-row";
-      prices.innerHTML = `
-        <div class="price-box">
-          <div class="price-label">Обычная</div>
-          <div class="price-val">${rub(item.price)}</div>
-        </div>
-        <div class="price-box">
-          <div class="price-label">Со скидкой</div>
-          <div class="price-val discount">${rub(item.discount_price)}</div>
-        </div>
-      `;
-      wrap.appendChild(prices);
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const you = Number(qty[item.item_id] || 0);
-      const grp = Number(groupTotals[item.item_id] || 0);
-      meta.innerHTML = `
-        <div class="meta-box">Ваше кол-во: ${you}</div>
-        <div class="meta-box">В группе: ${grp}</div>
-      `;
-      wrap.appendChild(meta);
-
-      const controls = document.createElement("div");
-      controls.className = "controls";
-
-      const mkBtn = (label, cls, handler) => {
-        const b = document.createElement("button");
-        b.textContent = label;
-        if (cls) b.className = cls;
-        b.addEventListener("click", handler);
-        return b;
-      };
-
-      controls.appendChild(mkBtn("-1", "", () => changeBy(item.item_id, -1)));
-      controls.appendChild(mkBtn("+1", "", () => changeBy(item.item_id, 1)));
-      controls.appendChild(mkBtn("+2", "primary", () => changeBy(item.item_id, 2)));
-      controls.appendChild(mkBtn("0", "warn", () => resetOne(item.item_id)));
-      controls.appendChild(mkBtn("Отправить", "send", () => sendSingle(item.item_id)));
-      wrap.appendChild(controls);
-
-      return wrap;
-    }
-
-    function render() {
-      const root = document.getElementById("groups");
-      root.innerHTML = "";
+    function toggleItem(itemId) {
+      selected[itemId] = selected[itemId] ? 0 : 1;
+      renderGroup();
       updateSummary();
+    }
 
-      if (!items.length) {
+    function renderTabs() {
+      const root = document.getElementById("tabs");
+      root.innerHTML = "";
+      if (!groups.length) return;
+      for (let i = 0; i < groups.length; i++) {
+        const g = groups[i];
+        const btn = document.createElement("button");
+        btn.className = `tab${i === activeGroupIdx ? " active" : ""}`;
+        btn.textContent = `${g.title} (${g.items.length})`;
+        btn.addEventListener("click", () => {
+          activeGroupIdx = i;
+          renderTabs();
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function renderGroup() {
+      const titleEl = document.getElementById("groupTitle");
+      const subEl = document.getElementById("groupSub");
+      const itemsEl = document.getElementById("items");
+      itemsEl.innerHTML = "";
+
+      if (!items.length || !groups.length) {
+        titleEl.textContent = "Нет товаров";
+        subEl.textContent = "";
         const empty = document.createElement("div");
         empty.className = "empty";
         if (!hasDataParam) {
@@ -351,38 +326,63 @@
         } else {
           empty.innerHTML = "Пока нет товаров на сегодня.<br/>Сначала запусти /collect в боте.";
         }
-        root.appendChild(empty);
+        itemsEl.appendChild(empty);
         return;
       }
 
-      for (const group of allGroups()) {
-        const sec = document.createElement("section");
-        sec.className = "card";
+      const g = groups[activeGroupIdx] || groups[0];
+      titleEl.textContent = g.title;
+      subEl.textContent = g.subtitle;
 
-        const title = document.createElement("div");
-        title.className = "section-title";
-        title.textContent = group.title;
-        sec.appendChild(title);
+      for (const item of g.items) {
+        const wrap = document.createElement("article");
+        wrap.className = "item";
 
-        const sub = document.createElement("div");
-        sub.className = "section-sub";
-        sub.textContent = group.subtitle;
-        sec.appendChild(sub);
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = item.name;
+        wrap.appendChild(name);
 
-        const itemsBox = document.createElement("div");
-        itemsBox.className = "items";
-        for (const item of group.items) {
-          itemsBox.appendChild(renderItem(item));
-        }
-        sec.appendChild(itemsBox);
+        const prices = document.createElement("div");
+        prices.className = "price-row";
+        prices.innerHTML = `
+          <div class="price-box">
+            <div class="price-label">Обычная</div>
+            <div class="price-val">${rub(item.price)}</div>
+          </div>
+          <div class="price-box">
+            <div class="price-label">Со скидкой</div>
+            <div class="price-val discount">${rub(item.discount_price)}</div>
+          </div>
+        `;
+        wrap.appendChild(prices);
 
-        root.appendChild(sec);
+        const t = document.createElement("button");
+        t.className = `toggle${selected[item.item_id] ? " active" : ""}`;
+        t.textContent = selected[item.item_id] ? "Выбрано" : "Выбрать";
+        t.addEventListener("click", () => toggleItem(item.item_id));
+        wrap.appendChild(t);
+
+        itemsEl.appendChild(wrap);
       }
+    }
+
+    function sendAll() {
+      const qty = {};
+      for (const item of items) {
+        qty[item.item_id] = selected[item.item_id] ? 1 : 0;
+      }
+      const payloadOut = { type: "all_choices", day, qty };
+      tg?.sendData(JSON.stringify(payloadOut));
+      tg?.close();
     }
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);
     document.getElementById("closeBtn").addEventListener("click", () => tg?.close());
-    render();
+
+    updateSummary();
+    renderTabs();
+    renderGroup();
   </script>
 </body>
 </html>
