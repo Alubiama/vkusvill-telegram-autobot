@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import hashlib
@@ -12,7 +12,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
-RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:₽|руб)", re.IGNORECASE)
+RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:в‚Ѕ|СЂСѓР±)", re.IGNORECASE)
 
 
 @dataclass
@@ -45,6 +45,19 @@ def _parse_price(token: str) -> float:
 
 def _item_id(name: str) -> str:
     return hashlib.sha1(name.strip().lower().encode("utf-8")).hexdigest()[:16]
+
+
+def _is_favorite_marker(text: str) -> bool:
+    lowered = _normalize_ws(text).lower()
+    markers = [
+        "РїРѕРґРѕР±СЂР°Р»Рё РґР»СЏ РІР°СЃ",
+        "РЅР°Р·РЅР°С‡РёС‚СЊ РЅРѕРІС‹Р№",
+        "Р»СЋР±РёРјС‹Р№ РїСЂРѕРґСѓРєС‚",
+        "Р»СЋР±РёРјС‹Р№ С‚РѕРІР°СЂ",
+        "СЂС—СЂС•СЂТ‘СЂС•СЂВ±СЃС’СЂВ°СЂВ»СЂС‘ СЂТ‘СЂВ»СЃСџ СЂС–СЂВ°СЃСЃ",
+        "СЂС•СЂВ°СЂВ·СЂС•СЂВ°СЃвЂЎСЂС‘СЃвЂљСЃСљ СЂС•СЂС•СЂС–СЃвЂ№СЂв„–",
+    ]
+    return any(marker in lowered for marker in markers)
 
 
 def _collect_from_dom(page, source: str) -> list[DiscountItem]:
@@ -94,12 +107,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
         if len(text) < 8:
             continue
 
-        # Favorite product card is not part of "6 discounts".
-        normalized_text = _normalize_ws(text).lower()
-        if "подобрали для вас" in normalized_text:
-            continue
-        if "назначить новый" in normalized_text:
-            continue
+        is_favorite = _is_favorite_marker(text)
 
         name = (card.get("name") or "").strip()
         if not name:
@@ -111,13 +119,13 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                     continue
                 if RUB_RE.search(ln):
                     continue
-                if "/" in ln and "шт" in ln.lower():
+                if "/" in ln and "С€С‚" in ln.lower():
                     continue
                 name = ln
                 break
         if len(name) < 3 or len(name) > 180:
             continue
-        if "подобрали для вас" in _normalize_ws(name).lower():
+        if _is_favorite_marker(name) and not is_favorite:
             continue
 
         price_tokens = []
@@ -156,7 +164,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                 name=name,
                 price=regular,
                 discount_price=discount,
-                source=source,
+                source=f"{source}_favorite" if is_favorite else source,
             )
         )
 
@@ -179,7 +187,7 @@ def _open_discounts_area(page) -> None:
             pass
 
     # Try navigation to discount-related section by text.
-    discount_sub = "\u0441\u043a\u0438\u0434"  # "скид"
+    discount_sub = "\u0441\u043a\u0438\u0434"  # "СЃРєРёРґ"
     candidates = page.locator("a")
     count = candidates.count()
     for idx in range(min(count, 80)):
@@ -204,11 +212,11 @@ def _is_logged_in(page) -> bool:
     text = page.inner_text("body")
     lowered = text.lower()
     # Strong login wall markers.
-    if "авторизуйтесь по" in lowered:
+    if "Р°РІС‚РѕСЂРёР·СѓР№С‚РµСЃСЊ РїРѕ" in lowered:
         return False
-    if "введите номер телефона" in lowered:
+    if "РІРІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°" in lowered:
         return False
-    if "с картой выгоднее" in lowered and "войти" in lowered:
+    if "СЃ РєР°СЂС‚РѕР№ РІС‹РіРѕРґРЅРµРµ" in lowered and "РІРѕР№С‚Рё" in lowered:
         return False
     return True
 
@@ -354,3 +362,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
