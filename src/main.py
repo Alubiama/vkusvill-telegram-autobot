@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,13 @@ def main() -> None:
     )
 
     settings = load_settings()
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", 45731))
+    except OSError:
+        logging.error("Another bot instance is already running. Exit.")
+        return
+
     store = StateStore(settings.db_path)
     provider = create_provider(settings)
     service = VkusvillGroupBot(settings=settings, store=store, provider=provider)

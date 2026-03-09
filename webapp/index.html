@@ -197,7 +197,8 @@
     const params = new URLSearchParams(window.location.search);
     const hasDataParam = params.has("data");
     const payload = decodeBase64UrlJson(params.get("data")) || {};
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const day = payload.day || today;
     document.getElementById("day").textContent = day;
 
