@@ -96,6 +96,7 @@ class VkusvillGroupBot:
         parts = urlsplit(self.settings.mini_app_url)
         query = dict(parse_qsl(parts.query, keep_blank_values=True))
         query["data"] = packed
+        query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
     def _open_showcase_markup(self, user_id: int | None = None) -> InlineKeyboardMarkup:
