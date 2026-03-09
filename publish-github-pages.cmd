@@ -62,6 +62,16 @@ if errorlevel 1 (
 if not defined GH_LOGIN (
   for /f "delims=" %%l in ('"%GH%" api user -q ".login"') do set GH_LOGIN=%%l
 )
+
+echo Ensuring GitHub Pages is enabled...
+"%GH%" api "repos/%GH_LOGIN%/%REPO_NAME%/pages" >nul 2>&1
+if errorlevel 1 (
+  "%GH%" api -X POST "repos/%GH_LOGIN%/%REPO_NAME%/pages" -f build_type=workflow >nul 2>&1
+)
+
+echo Triggering Pages deployment...
+"%GH%" workflow run pages.yml --repo "%GH_LOGIN%/%REPO_NAME%" >nul 2>&1
+
 set PAGE_URL=https://%GH_LOGIN%.github.io/%REPO_NAME%/
 echo.
 echo Repo ready. GitHub Pages URL (after workflow completes):
