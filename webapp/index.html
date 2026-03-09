@@ -195,6 +195,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
+    const hasDataParam = params.has("data");
     const payload = decodeBase64UrlJson(params.get("data")) || {};
     const today = new Date().toISOString().slice(0, 10);
     const day = payload.day || today;
@@ -344,7 +345,11 @@
       if (!items.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        empty.innerHTML = "Пока нет товаров на сегодня.<br/>Сначала запусти /collect в боте.";
+        if (!hasDataParam) {
+          empty.innerHTML = "Здесь нет данных по товарам.<br/>Открой Mini App через команду /app в боте.";
+        } else {
+          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Сначала запусти /collect в боте.";
+        }
         root.appendChild(empty);
         return;
       }
