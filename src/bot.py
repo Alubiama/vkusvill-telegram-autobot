@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import (
@@ -46,16 +48,67 @@ class VkusvillGroupBot:
             return
         await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
 
-    def _open_showcase_markup(self) -> InlineKeyboardMarkup:
+    def _build_mini_app_url(self, user_id: int | None) -> str | None:
+        if not self.settings.mini_app_url:
+            return None
+
+        day = self._today()
+        items = self.store.list_items(day)
+        if not items:
+            return self.settings.mini_app_url
+
+        totals = {row["item_id"]: int(row["qty"]) for row in self.store.totals_by_item(day)}
+        your: dict[str, int] = {}
+        if user_id is not None:
+            for item in items:
+                your[item.item_id] = self.store.get_user_qty(day, user_id, item.item_id)
+
+        payload = {
+            "day": day,
+            "items": [
+                {
+                    "i": item.item_id,
+                    "n": item.name,
+                    "p": float(item.price),
+                    "d": float(item.discount_price),
+                    "s": item.source,
+                }
+                for item in items
+            ],
+            "totals": totals,
+            "your": your,
+        }
+
+        packed = base64.urlsafe_b64encode(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+
+        # Keep URL reasonably short for Telegram clients.
+        if len(packed) > 7000:
+            packed = base64.urlsafe_b64encode(
+                json.dumps(
+                    {"day": day, "items": payload["items"]},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).decode("ascii").rstrip("=")
+
+        parts = urlsplit(self.settings.mini_app_url)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        query["data"] = packed
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+    def _open_showcase_markup(self, user_id: int | None = None) -> InlineKeyboardMarkup:
         rows: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton("Open Showcase", callback_data="b|o|0")]
         ]
         if self.settings.mini_app_url:
+            web_url = self._build_mini_app_url(user_id) or self.settings.mini_app_url
             rows.append(
                 [
                     InlineKeyboardButton(
                         "Open App Window",
-                        web_app=WebAppInfo(url=self.settings.mini_app_url),
+                        web_app=WebAppInfo(url=web_url),
                     )
                 ]
             )
@@ -167,17 +220,18 @@ class VkusvillGroupBot:
             )
 
     async def app(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if update.message is None:
+        if update.message is None or update.effective_user is None:
             return
         if not self.settings.mini_app_url:
             await update.message.reply_text(
                 "Mini App URL is not configured yet. Set MINI_APP_URL in .env first."
             )
             return
+        web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
         await update.message.reply_text(
             "Open app window:",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Open App Window", web_app=WebAppInfo(url=self.settings.mini_app_url))]]
+                [[InlineKeyboardButton("Open App Window", web_app=WebAppInfo(url=web_url))]]
             ),
         )
 

@@ -99,7 +99,7 @@ class StateStore:
     def list_items(self, day: str) -> list[ItemRow]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT item_id, name, price, discount_price, source FROM items WHERE day = ? ORDER BY name",
+                "SELECT item_id, name, price, discount_price, source FROM items WHERE day = ? ORDER BY rowid",
                 (day,),
             ).fetchall()
         return [ItemRow(**dict(row)) for row in rows]
