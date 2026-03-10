@@ -5,6 +5,7 @@ import json
 import logging
 import shlex
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -456,6 +457,68 @@ class VkusvillGroupBot:
             )
         await update.message.reply_text("\n".join(lines))
 
+    async def cart(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        await update.message.reply_text("Scanning cart and matching with today discounts...")
+
+        cmd = [
+            sys.executable,
+            "scripts/vkusvill_cart_report.py",
+            "--discounts-json",
+            self.settings.discounts_json_path,
+            "--chrome-user-data-dir",
+            "data/chrome-user-data",
+            "--chrome-profile-name",
+            "Default",
+            "--headless",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            err = (exc.stderr or exc.stdout or str(exc)).strip()
+            await update.message.reply_text(f"Cart scan failed:\n{err[:3000]}")
+            return
+
+        stdout = (proc.stdout or "").strip()
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            await update.message.reply_text(f"Cart scan parse error:\n{stdout[:3000]}")
+            return
+
+        if payload.get("error"):
+            await update.message.reply_text(f"Cart scan error: {payload['error']}")
+            return
+
+        cart_count = int(payload.get("cart_count") or 0)
+        matched = payload.get("matches") or []
+        unmatched = payload.get("unmatched") or []
+
+        if cart_count == 0:
+            await update.message.reply_text(
+                "Cart is empty in web profile now. Add items to cart, then run /cart again."
+            )
+            return
+
+        lines = [f"Cart scan: {cart_count} items, with today discounts: {len(matched)}."]
+        if matched:
+            lines.append("")
+            lines.append("Top by savings:")
+            for idx, row in enumerate(matched[:20], start=1):
+                lines.append(
+                    (
+                        f"{idx}. {row['name']} x{int(row['qty'])}\n"
+                        f"   {float(row['discount_price']):.2f}/{float(row['price']):.2f} RUB, "
+                        f"save {float(row['saving_total']):.2f} RUB ({float(row['saving_percent']):.1f}%)"
+                    )
+                )
+        if unmatched:
+            lines.append("")
+            lines.append(f"Without match in today's discounts: {len(unmatched)}.")
+
+        await update.message.reply_text("\n".join(lines)[:3900])
+
     async def finalize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._finalize_impl(context.application)
         if update.message:
@@ -553,6 +616,7 @@ class VkusvillGroupBot:
             "/bind - bind current chat\n"
             "/shop - open scrollable showcase\n"
             "/status - show current selections\n"
+            "/cart - scan cart and sort matched discounts\n"
             "/finalize - prepare final order\n"
             "/resetday - clear today items and votes\n"
             "/app - open Mini App button (if URL configured)\n"
@@ -567,6 +631,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("browse", self.shop))
         app.add_handler(CommandHandler("app", self.app))
         app.add_handler(CommandHandler("status", self.status))
+        app.add_handler(CommandHandler("cart", self.cart))
         app.add_handler(CommandHandler("finalize", self.finalize))
         app.add_handler(CommandHandler("resetday", self.resetday))
         app.add_handler(CommandHandler("help", self.help))
