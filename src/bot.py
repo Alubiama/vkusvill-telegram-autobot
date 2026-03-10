@@ -55,6 +55,17 @@ class VkusvillGroupBot:
             return
         await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
 
+    def _trace_webapp(self, message: str) -> None:
+        try:
+            out_dir = Path(self.settings.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            log_path = out_dir / "webapp_events.log"
+            ts = datetime.now(self.settings.timezone).strftime("%Y-%m-%d %H:%M:%S")
+            with log_path.open("a", encoding="utf-8") as fp:
+                fp.write(f"[{ts}] {message}\n")
+        except Exception:
+            pass
+
     @staticmethod
     def _is_favorite_item(name: str, source: str) -> bool:
         src = (source or "").lower()
@@ -172,6 +183,16 @@ class VkusvillGroupBot:
         query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
+    def _regular_inshop_count(self, items: list[object]) -> int:
+        count = 0
+        for item in items:
+            if self._is_favorite_item(item.name, item.source):
+                continue
+            if self._is_ready_food_offer(item.source):
+                continue
+            count += 1
+        return count
+
     def _open_showcase_markup(self, user_id: int | None = None) -> InlineKeyboardMarkup:
         rows: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton("Open Showcase", callback_data="b|o|0")]
@@ -243,9 +264,15 @@ class VkusvillGroupBot:
         if update.message:
             await update.message.reply_text("Discounts refreshed.")
 
-    async def _collect_impl(self, app: Application) -> None:
+    async def _collect_impl(self, app: Application, skip_if_full: bool = False) -> None:
         now = datetime.now(self.settings.timezone)
         day = now.strftime("%Y-%m-%d")
+        if skip_if_full:
+            existing = self.store.list_items(day)
+            regular_count = self._regular_inshop_count(existing)
+            if regular_count >= 18:
+                LOGGER.info("Skip scheduled collect: already have %s regular inshop items for %s", regular_count, day)
+                return
         try:
             items = self.provider.fetch(now)
         except Exception as exc:
@@ -268,7 +295,7 @@ class VkusvillGroupBot:
         )
 
     async def scheduled_collect(self, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self._collect_impl(context.application)
+        await self._collect_impl(context.application, skip_if_full=True)
 
     async def shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_user is None:
@@ -319,11 +346,20 @@ class VkusvillGroupBot:
             return
         wad = update.message.web_app_data
         if wad is None or not wad.data:
+            self._trace_webapp(
+                f"empty_webapp_data chat={update.effective_chat.id if update.effective_chat else 'na'} "
+                f"user={update.effective_user.id}"
+            )
             return
 
+        self._trace_webapp(
+            f"incoming chat={update.effective_chat.id if update.effective_chat else 'na'} "
+            f"user={update.effective_user.id} len={len(wad.data)}"
+        )
         try:
             payload = json.loads(wad.data)
         except json.JSONDecodeError:
+            self._trace_webapp("json_decode_error")
             await update.message.reply_text("Mini App payload parse error.")
             return
 
@@ -335,13 +371,19 @@ class VkusvillGroupBot:
         snapshot_id = self._snapshot_id(items, day)
 
         ptype = payload.get("type")
+        self._trace_webapp(
+            f"parsed type={ptype} payload_day={payload.get('day')} payload_snapshot={payload.get('snapshot_id')} "
+            f"items_today={len(items)}"
+        )
         if ptype == "single_choice":
             item_id = str(payload.get("item_id") or "")
             qty = int(payload.get("qty") or 0)
             if item_id not in items_by_id:
+                self._trace_webapp(f"single_choice_not_found item_id={item_id}")
                 await update.message.reply_text("Item not found for today.")
                 return
             self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
+            self._trace_webapp(f"single_choice_saved item_id={item_id} qty={max(0, qty)}")
             await update.message.reply_text(f"Saved: {items_by_id[item_id].name} -> {max(0, qty)}")
             return
 
@@ -349,11 +391,13 @@ class VkusvillGroupBot:
             payload_day = str(payload.get("day") or "")
             payload_snapshot = str(payload.get("snapshot_id") or "")
             if payload_day and payload_day != day:
+                self._trace_webapp(f"stale_day payload_day={payload_day} day={day}")
                 await update.message.reply_text(
                     f"Data is stale ({payload_day} vs {day}). Reopen Mini App via /app."
                 )
                 return
             if payload_snapshot and payload_snapshot != snapshot_id:
+                self._trace_webapp(f"stale_snapshot payload={payload_snapshot} actual={snapshot_id}")
                 await update.message.reply_text(
                     "Data snapshot is outdated. Reopen Mini App via /app and submit again."
                 )
@@ -372,16 +416,31 @@ class VkusvillGroupBot:
                     selected_positive += 1
 
             if touched == 0:
-                await update.message.reply_text(
-                    "Nothing saved: no matching items for today's snapshot. Reopen Mini App via /app."
-                )
+                self._trace_webapp("all_choices_touched_0")
+                msg = "Nothing saved: no matching items for today's snapshot. Reopen Mini App via /app."
+                await update.message.reply_text(msg)
+                bound_chat_id = self._get_chat_id()
+                current_chat = update.effective_chat.id if update.effective_chat else None
+                if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
+                    await self._send(
+                        context.application,
+                        f"{user_name}: selection not saved (stale snapshot). Please reopen /app and submit again.",
+                    )
                 return
 
-            await update.message.reply_text(
-                f"Saved: {selected_positive} selected items (updated {touched} entries)."
-            )
+            self._trace_webapp(f"all_choices_saved selected={selected_positive} touched={touched}")
+            msg = f"Saved: {selected_positive} selected items (updated {touched} entries)."
+            await update.message.reply_text(msg)
+            bound_chat_id = self._get_chat_id()
+            current_chat = update.effective_chat.id if update.effective_chat else None
+            if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
+                await self._send(
+                    context.application,
+                    f"{user_name}: {selected_positive} items selected (updated {touched}).",
+                )
             return
 
+        self._trace_webapp(f"unknown_type type={ptype}")
         await update.message.reply_text("Unknown Mini App payload type.")
 
     async def on_browser(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

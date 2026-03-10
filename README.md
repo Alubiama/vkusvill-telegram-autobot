@@ -173,3 +173,32 @@ Starter web app template is in:
 
 Mini App sends user choices back with `Telegram.WebApp.sendData(...)`.
 The bot saves those choices automatically.
+
+## Delivery Context Guard
+
+VkusVill assortment and personal discounts depend on delivery area/address.
+To avoid collecting data from a wrong city/address, set:
+
+```env
+VKUSVILL_EXPECTED_DELIVERY=Маршала Крылова
+```
+
+and keep `RPA_COMMAND` with:
+- `--expected-delivery-hint "%VKUSVILL_EXPECTED_DELIVERY%"`
+- `--strict-delivery-check`
+
+If current delivery context in web profile does not match this hint,
+collection fails early instead of publishing wrong items.
+
+## Strict 3x6 Collection
+
+Use strict wave mode to guarantee the sequence:
+1) collect current 6
+2) replace and collect next 6
+3) replace and collect next 6
+
+CLI flag:
+`--require-distinct-waves`
+
+If waves are not distinct or daily replace limit is already spent,
+collector exits with error instead of returning partial/duplicated waves.

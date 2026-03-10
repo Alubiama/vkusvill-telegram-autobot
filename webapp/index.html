@@ -232,7 +232,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260310-4";
+    const BUILD_ID = "b-20260310-5";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -534,10 +534,19 @@
       }
       const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
       try {
-        tg?.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен боту. В группе придет подтверждение: Saved: ...", "ok");
+        if (!tg || typeof tg.sendData !== "function") {
+          throw new Error("Telegram WebApp API недоступен");
+        }
+        if (!tg.initData || String(tg.initData).length < 8) {
+          throw new Error("Mini App открыт вне Telegram-контекста");
+        }
+        tg.sendData(JSON.stringify(payloadOut));
+        setSendState(
+          "Выбор отправлен. Если в чате нет ответа от бота (Saved: ...), открой Mini App заново через /app.",
+          "ok",
+        );
       } catch (_err) {
-        setSendState("Не удалось отправить выбор. Открой /app и попробуй снова.", "err");
+        setSendState("Отправка не сработала. Открой Mini App через /app и повтори.", "err");
       } finally {
         if (btn) {
           btn.disabled = false;
