@@ -140,7 +140,7 @@ class VkusvillGroupBot:
                     "items": chunk,
                 }
             )
-        return groups, favorites, ready_food[:9]
+        return groups, favorites, ready_food
 
     def _build_mini_app_url(self, user_id: int | None) -> str | None:
         if not self.settings.mini_app_url:

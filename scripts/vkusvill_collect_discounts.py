@@ -419,6 +419,8 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
     page.wait_for_timeout(2200)
 
     # Category page uses lazy loading. Scroll several times to load more cards.
+    # max_items <= 0 means "no hard cap".
+    target_min_count = max_items if max_items > 0 else 10_000_000
     previous_count = 0
     stable_rounds = 0
     for _ in range(10):
@@ -444,7 +446,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
         else:
             stable_rounds = 0
         previous_count = max(previous_count, visible_count)
-        if stable_rounds >= 2 and visible_count >= max_items:
+        if stable_rounds >= 2 and visible_count >= target_min_count:
             break
         page.evaluate("() => window.scrollBy(0, Math.max(1000, window.innerHeight * 0.9))")
         page.wait_for_timeout(850)
@@ -519,7 +521,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
                 source="vkusvill_offers_ready_food",
             )
         )
-        if len(items) >= max_items:
+        if max_items > 0 and len(items) >= max_items:
             break
     return items
 
@@ -804,7 +806,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-file", default="data/today_discounts.json")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--interactive-login", action="store_true")
-    parser.add_argument("--max-items", type=int, default=24)
+    parser.add_argument(
+        "--max-items",
+        type=int,
+        default=0,
+        help="Hard cap for total output items. 0 means unlimited.",
+    )
     parser.add_argument("--waves", type=int, default=1, help="How many waves to collect (1..3).")
     parser.add_argument(
         "--require-distinct-waves",
@@ -816,7 +823,12 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional URL for extra 'Ваши скидки -> Готовая еда' collection.",
     )
-    parser.add_argument("--offers-ready-food-max", type=int, default=9)
+    parser.add_argument(
+        "--offers-ready-food-max",
+        type=int,
+        default=0,
+        help="Hard cap for ready-food items. 0 means unlimited.",
+    )
     parser.add_argument(
         "--expected-delivery-hint",
         default="",
@@ -857,7 +869,7 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
             extra = _collect_offers_ready_food(
                 page,
                 url=args.offers_ready_food_url,
-                max_items=max(1, int(args.offers_ready_food_max)),
+                max_items=int(args.offers_ready_food_max),
             )
             if extra:
                 _log(f"[collector] offers ready food: +{len(extra)} items")
@@ -956,7 +968,7 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                     extra = _collect_offers_ready_food(
                         page,
                         url=args.offers_ready_food_url,
-                        max_items=max(1, int(args.offers_ready_food_max)),
+                        max_items=int(args.offers_ready_food_max),
                     )
                     if extra:
                         _log(f"[collector] offers ready food: +{len(extra)} items")
@@ -979,7 +991,7 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
             extra = _collect_offers_ready_food(
                 page,
                 url=args.offers_ready_food_url,
-                max_items=max(1, int(args.offers_ready_food_max)),
+                max_items=int(args.offers_ready_food_max),
             )
             if extra:
                 _log(f"[collector] offers ready food: +{len(extra)} items")
@@ -1000,7 +1012,9 @@ def main() -> None:
     else:
         items = _collect_with_system_chrome(args)
 
-    items = [x for x in items if x.name and x.discount_price > 0][: args.max_items]
+    items = [x for x in items if x.name and x.discount_price > 0]
+    if int(args.max_items) > 0:
+        items = items[: int(args.max_items)]
     if not items:
         raise SystemExit("No discounts detected. Check login status and page selectors.")
 

@@ -18,8 +18,8 @@ if not exist "data\chrome-user-data\Default" (
 
 echo Running discount collection from automation profile...
 if defined VKUSVILL_EXPECTED_DELIVERY (
-  ".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "Default" --interactive-login --waves 3 --require-distinct-waves --offers-ready-food-url "https://vkusvill.ru/offers/gotovaya-eda/" --offers-ready-food-max 9 --expected-delivery-hint "%VKUSVILL_EXPECTED_DELIVERY%" --strict-delivery-check --out-file data\today_discounts.json
+  ".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "Default" --interactive-login --waves 3 --require-distinct-waves --offers-ready-food-url "https://vkusvill.ru/offers/gotovaya-eda/" --offers-ready-food-max 0 --expected-delivery-hint "%VKUSVILL_EXPECTED_DELIVERY%" --strict-delivery-check --out-file data\today_discounts.json
 ) else (
-  ".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "Default" --interactive-login --waves 3 --require-distinct-waves --offers-ready-food-url "https://vkusvill.ru/offers/gotovaya-eda/" --offers-ready-food-max 9 --out-file data\today_discounts.json
+  ".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "Default" --interactive-login --waves 3 --require-distinct-waves --offers-ready-food-url "https://vkusvill.ru/offers/gotovaya-eda/" --offers-ready-food-max 0 --out-file data\today_discounts.json
 )
 exit /b %errorlevel%

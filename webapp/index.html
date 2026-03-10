@@ -336,7 +336,7 @@
           type: "group",
         });
       }
-      return { groups, favorite: favorites.slice(0, 1), readyFood: readyFood.slice(0, 24) };
+      return { groups, favorite: favorites.slice(0, 1), readyFood };
     }
 
     let groups = [];
@@ -365,7 +365,7 @@
         };
       });
       favoriteItems = compactFavorite.map(mapItem).filter(validItem).slice(0, 1);
-      readyFoodItems = compactReadyFood.map(mapItem).filter(validItem).slice(0, 24);
+      readyFoodItems = compactReadyFood.map(mapItem).filter(validItem);
     } else if (payloadGroups.length) {
       groups = [0, 1, 2].map((idx) => {
         const g = payloadGroups[idx] || {};
@@ -378,7 +378,7 @@
         };
       });
       favoriteItems = payloadFavorite.slice(0, 1);
-      readyFoodItems = payloadReadyFood.slice(0, 24);
+      readyFoodItems = payloadReadyFood;
     } else {
       const fb = fallbackGroupsFromItems(fallbackItems);
       groups = fb.groups;
