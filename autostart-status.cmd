@@ -30,7 +30,7 @@ if errorlevel 1 (
   set STATUS=0
 )
 
-tasklist /V /FO CSV | findstr /I "watchdog-loop.cmd" >nul
+wmic process where "name='cmd.exe' and commandline like '%%watchdog-loop.cmd%%'" get ProcessId /value | findstr /R /C:"ProcessId=[0-9]" >nul
 if errorlevel 1 (
   echo Watchdog process: not running.
 ) else (
