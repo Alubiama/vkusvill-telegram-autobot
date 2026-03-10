@@ -249,7 +249,9 @@ class VkusvillGroupBot:
         items = self.store.list_items(day)
         if not items:
             if update.message:
-                await update.message.reply_text("No discounts yet. Run /collect first.")
+                await update.message.reply_text(
+                    "Today items are updated automatically at 10:00 (Europe/Moscow). Please check again later."
+                )
             return
 
         item = items[0]
@@ -427,7 +429,9 @@ class VkusvillGroupBot:
         day = self._today()
         totals = self.store.totals_by_item(day)
         if not totals:
-            await update.message.reply_text("No discounts yet.")
+            await update.message.reply_text(
+                "No items yet for today. Auto update runs daily at 10:00 (Europe/Moscow)."
+            )
             return
 
         lines = [f"Status for {day}:"]
@@ -448,8 +452,20 @@ class VkusvillGroupBot:
         day = self._today()
         self.store.clear_day(day)
         await update.message.reply_text(
-            f"Day state cleared for {day}. Run /collect to load the first 6 items again."
+            f"Day state cleared for {day}. Automatic update will refill items at 10:00 (Europe/Moscow)."
         )
+
+    def _schedule_startup_collect_if_needed(self, app: Application) -> None:
+        day = self._today()
+        if self.store.list_items(day):
+            return
+        if not self.settings.collection_times:
+            return
+        first_time = min(self.settings.collection_times)
+        now = datetime.now(self.settings.timezone)
+        if (now.hour, now.minute) < (first_time.hour, first_time.minute):
+            return
+        app.job_queue.run_once(self.scheduled_collect, when=5, name="collect-startup-catchup")
 
     def _build_final_payload(self, day: str) -> dict:
         totals = self.store.totals_by_item(day)
@@ -520,7 +536,6 @@ class VkusvillGroupBot:
             return
         await update.message.reply_text(
             "/bind - bind current chat\n"
-            "/collect - collect discounts now\n"
             "/shop - open scrollable showcase\n"
             "/status - show current selections\n"
             "/finalize - prepare final order\n"
@@ -533,7 +548,6 @@ class VkusvillGroupBot:
         app = Application.builder().token(self.settings.bot_token).build()
 
         app.add_handler(CommandHandler("bind", self.bind))
-        app.add_handler(CommandHandler("collect", self.collect))
         app.add_handler(CommandHandler("shop", self.shop))
         app.add_handler(CommandHandler("browse", self.shop))
         app.add_handler(CommandHandler("app", self.app))
@@ -556,4 +570,5 @@ class VkusvillGroupBot:
             time=self.settings.order_deadline,
             name="finalize",
         )
+        self._schedule_startup_collect_if_needed(app)
         return app

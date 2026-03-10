@@ -25,7 +25,7 @@ def _parse_clock(value: str) -> time:
 
 
 def _parse_collection_times(value: str | None) -> list[time]:
-    raw = value or "09:00,13:00,17:00"
+    raw = value or "10:00"
     times = [_parse_clock(part) for part in raw.split(",") if part.strip()]
     if not times:
         raise ValueError("COLLECTION_TIMES is empty")
