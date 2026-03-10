@@ -36,6 +36,7 @@ def _parse_collection_times(value: str | None) -> list[time]:
 class Settings:
     bot_token: str
     chat_id: int | None
+    owner_user_id: int | None
     timezone: ZoneInfo
     collection_times: list[time]
     order_deadline: time
@@ -57,6 +58,7 @@ def load_settings() -> Settings:
     return Settings(
         bot_token=bot_token,
         chat_id=_parse_chat_id(os.getenv("CHAT_ID")),
+        owner_user_id=_parse_chat_id(os.getenv("OWNER_USER_ID")),
         timezone=ZoneInfo(os.getenv("TIMEZONE", "Europe/Moscow")),
         collection_times=_parse_collection_times(os.getenv("COLLECTION_TIMES")),
         order_deadline=_parse_clock(os.getenv("ORDER_DEADLINE", "19:30")),

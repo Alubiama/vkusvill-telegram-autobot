@@ -418,6 +418,38 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
     page.goto(url, wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_timeout(2200)
 
+    # Category page uses lazy loading. Scroll several times to load more cards.
+    previous_count = 0
+    stable_rounds = 0
+    for _ in range(10):
+        visible_count = int(
+            page.evaluate(
+                """
+                () => {
+                  let cards = Array.from(
+                    document.querySelectorAll('.ProductsSection .ProductCards__list .js-datalayer-catalog-list-item[data-xmlid]')
+                  );
+                  if (!cards.length) {
+                    cards = Array.from(document.querySelectorAll('.js-datalayer-catalog-list-item[data-xmlid]'))
+                      .filter((el) => !el.closest('.VV23_6ProdsAuthorizedSlider, .VV23_6ProdsAuthorized, .swiper-container'));
+                  }
+                  return cards.length;
+                }
+                """
+            )
+            or 0
+        )
+        if visible_count <= previous_count:
+            stable_rounds += 1
+        else:
+            stable_rounds = 0
+        previous_count = max(previous_count, visible_count)
+        if stable_rounds >= 2 and visible_count >= max_items:
+            break
+        page.evaluate("() => window.scrollBy(0, Math.max(1000, window.innerHeight * 0.9))")
+        page.wait_for_timeout(850)
+    _log(f"[collector] offers ready food: visible cards after scroll={previous_count}")
+
     raw = page.evaluate(
         """
         () => {

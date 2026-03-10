@@ -28,11 +28,11 @@
         linear-gradient(180deg, var(--bg0), var(--bg1));
       color: var(--ink);
       min-height: 100vh;
-      padding: 8px;
+      padding: 6px;
     }
     .shell {
       width: 100%;
-      max-width: 390px;
+      max-width: 356px;
       margin: 0 auto;
       display: grid;
       gap: 8px;
@@ -52,23 +52,23 @@
       gap: 10px;
     }
     .t1 { font-size: 11px; color: var(--muted); }
-    .t2 { font-size: 15px; font-weight: 700; }
+    .t2 { font-size: 14px; font-weight: 700; }
     .pill {
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 6px 8px;
-      font-size: 12px;
+      font-size: 11px;
       background: #f9fcf7;
       white-space: nowrap;
     }
     .section-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       margin-bottom: 4px;
     }
     .section-sub {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
       margin-bottom: 6px;
     }
     .tabs {
@@ -83,7 +83,7 @@
       border-radius: 999px;
       background: #fff;
       color: var(--ink);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       padding: 6px 9px;
       white-space: nowrap;
@@ -106,7 +106,7 @@
       min-width: 0;
     }
     .name {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       line-height: 1.2;
       margin-bottom: 6px;
@@ -125,7 +125,7 @@
       background: #fff;
     }
     .price-label { font-size: 11px; color: var(--muted); }
-    .price-val { font-size: 13px; font-weight: 700; }
+    .price-val { font-size: 12px; font-weight: 700; }
     .discount { color: var(--ok); }
     .toggle {
       width: 100%;
@@ -133,7 +133,7 @@
       border-radius: 9px;
       background: #fff;
       color: var(--ink);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       padding: 8px 7px;
       cursor: pointer;
@@ -163,7 +163,7 @@
       border-radius: 9px;
       background: #fff;
       color: var(--ink);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       padding: 8px 7px;
       cursor: pointer;
@@ -233,7 +233,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260310-8";
+    const BUILD_ID = "b-20260310-9";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -588,7 +588,7 @@
           throw new Error("Telegram WebApp API unavailable");
         }
         tg.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен. В чате должно прийти подтверждение от бота (Saved: ...).", "ok");
+        setSendState("Выбор отправлен. Если не пришел ответ бота в чате за 3-5 секунд, открой /app заново.", "ok");
       } catch (err) {
         const reason = (err && err.message) ? err.message : "unknown";
         const hasTg = Boolean(tg);

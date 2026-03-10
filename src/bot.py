@@ -31,6 +31,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class VkusvillGroupBot:
+    COLLECT_NOW_BUTTON = "Собрать заказ сейчас"
+
     def __init__(self, settings: Settings, store: StateStore, provider: BaseProvider) -> None:
         self.settings = settings
         self.store = store
@@ -38,6 +40,9 @@ class VkusvillGroupBot:
 
     def _today(self) -> str:
         return datetime.now(self.settings.timezone).strftime("%Y-%m-%d")
+
+    def _collection_schedule_text(self) -> str:
+        return ", ".join(t.strftime("%H:%M") for t in self.settings.collection_times)
 
     @staticmethod
     def _snapshot_id(items: list[object], day: str) -> str:
@@ -49,6 +54,35 @@ class VkusvillGroupBot:
             return self.settings.chat_id
         raw = self.store.get_meta("chat_id")
         return int(raw) if raw else None
+
+    def _get_owner_user_id(self) -> int | None:
+        if self.settings.owner_user_id is not None:
+            return self.settings.owner_user_id
+        raw = self.store.get_meta("owner_user_id")
+        return int(raw) if raw else None
+
+    def _set_owner_user_id(self, user_id: int) -> None:
+        self.store.set_meta("owner_user_id", str(user_id))
+
+    def _user_is_owner(self, user_id: int | None) -> bool:
+        if user_id is None:
+            return False
+        owner_id = self._get_owner_user_id()
+        if owner_id is None:
+            return False
+        return int(user_id) == int(owner_id)
+
+    async def _check_owner_or_reply(self, update: Update) -> bool:
+        if update.message is None or update.effective_user is None:
+            return False
+        if self._user_is_owner(update.effective_user.id):
+            return True
+        owner_id = self._get_owner_user_id()
+        if owner_id is None:
+            await update.message.reply_text("Владелец не задан. Сначала выполни /setowner.")
+            return False
+        await update.message.reply_text(f"Только владелец может это сделать. OWNER_USER_ID={owner_id}")
+        return False
 
     async def _send(self, app: Application, text: str, **kwargs) -> None:
         chat_id = self._get_chat_id()
@@ -240,16 +274,100 @@ class VkusvillGroupBot:
         )
 
     async def bind(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if update.effective_chat is None or update.message is None:
+        if update.effective_chat is None or update.message is None or update.effective_user is None:
             return
+        if not await self._check_owner_or_reply(update):
+            return
+        force_private = bool(context.args and str(context.args[0]).lower() == "force")
+        if update.effective_chat.type == "private" and not force_private:
+            await update.message.reply_text(
+                "Сейчас это личный чат. Для рабочего режима привяжи группу командой /bind в группе.\n"
+                "Если нужно оставить личный чат, используй /bind force."
+            )
+            return
+
         chat_id = update.effective_chat.id
         self.store.set_meta("chat_id", str(chat_id))
-        await update.message.reply_text(f"Chat is bound: {chat_id}")
+        chat_type = update.effective_chat.type
+        await update.message.reply_text(
+            f"Чат привязан: {chat_id} ({chat_type}). Теперь служебные сообщения идут сюда."
+        )
+
+    async def setowner(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None or update.effective_user is None:
+            return
+        user_id = update.effective_user.id
+
+        if self.settings.owner_user_id is not None:
+            if user_id == self.settings.owner_user_id:
+                await update.message.reply_text(f"OWNER_USER_ID зафиксирован в .env. Ты владелец: {user_id}")
+            else:
+                await update.message.reply_text(
+                    f"Владелец зафиксирован в .env: {self.settings.owner_user_id}. Из чата изменить нельзя."
+                )
+            return
+
+        current_owner = self._get_owner_user_id()
+        if current_owner is None:
+            self._set_owner_user_id(user_id)
+            await update.message.reply_text(f"Владелец установлен: {user_id}")
+            return
+        if current_owner != user_id:
+            await update.message.reply_text(f"Только текущий владелец ({current_owner}) может подтвердить owner.")
+            return
+        self._set_owner_user_id(user_id)
+        await update.message.reply_text(f"Владелец подтвержден: {user_id}")
 
     async def collect(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_owner_or_reply(update):
+            return
         await self._collect_impl(context.application)
         if update.message:
-            await update.message.reply_text("Discounts refreshed.")
+            await update.message.reply_text("Скидки обновлены.")
+
+    async def where(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        bound_chat_id = self._get_chat_id()
+        owner_id = self._get_owner_user_id()
+        current_chat_id = update.effective_chat.id if update.effective_chat else None
+        current_chat_type = update.effective_chat.type if update.effective_chat else "unknown"
+        current_user_id = update.effective_user.id if update.effective_user else None
+        lines = [
+            f"Current chat: {current_chat_id} ({current_chat_type})",
+            f"Bound chat: {bound_chat_id}",
+            f"Owner: {owner_id}",
+            f"You: {current_user_id}",
+        ]
+        if bound_chat_id is None:
+            lines.append("Подсказка: запусти /bind в группе заказа.")
+        await update.message.reply_text("\n".join(lines))
+
+    async def selftest(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        day = self._today()
+        items = self.store.list_items(day)
+        regular_count = self._regular_inshop_count(items)
+        favorite_count = sum(1 for x in items if self._is_favorite_item(x.name, x.source))
+        ready_food_count = sum(1 for x in items if self._is_ready_food_offer(x.source))
+        lines = [
+            f"Selftest {day}",
+            f"- bound_chat: {self._get_chat_id()}",
+            f"- owner: {self._get_owner_user_id()}",
+            f"- provider: {self.settings.provider}",
+            f"- dry_run: {self.settings.dry_run}",
+            f"- collection_times: {', '.join(t.strftime('%H:%M') for t in self.settings.collection_times)}",
+            f"- order_deadline: {self.settings.order_deadline.strftime('%H:%M')}",
+            f"- items_total: {len(items)}",
+            f"- inshop_regular: {regular_count}/18",
+            f"- favorite: {favorite_count}",
+            f"- ready_food: {ready_food_count}",
+        ]
+        await update.message.reply_text("\n".join(lines))
 
     async def _collect_impl(self, app: Application, skip_if_full: bool = False) -> None:
         now = datetime.now(self.settings.timezone)
@@ -265,18 +383,22 @@ class VkusvillGroupBot:
         except Exception as exc:
             await self._send(
                 app,
-                f"Collect failed: {exc}. Check VkusVill session and collector settings.",
+                f"Сбор скидок не удался: {exc}. Проверь сессию ВкусВилл и настройки сборщика.",
             )
             LOGGER.exception("Collect failed")
             return
 
         fresh, removed = self.store.sync_items(day, [x.to_row() for x in items])
         all_items = self.store.list_items(day)
+        regular_count = self._regular_inshop_count(all_items)
+        favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
+        ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
         await self._send(
             app,
             (
-                f"Collection {now.strftime('%H:%M')} complete. "
-                f"Items in base: {len(all_items)}, new: {len(fresh)}, removed: {removed}."
+                f"Сбор {now.strftime('%H:%M')} завершен. "
+                f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
+                f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}."
             ),
             reply_markup=self._open_showcase_markup(),
         )
@@ -292,7 +414,7 @@ class VkusvillGroupBot:
         if not items:
             if update.message:
                 await update.message.reply_text(
-                    "Today items are updated automatically at 10:00 (Europe/Moscow). Please check again later."
+                    f"Товары обновляются автоматически по расписанию: {self._collection_schedule_text()} (Europe/Moscow)."
                 )
             return
 
@@ -317,12 +439,15 @@ class VkusvillGroupBot:
             return
         if not self.settings.mini_app_url:
             await update.message.reply_text(
-                "Mini App URL is not configured yet. Set MINI_APP_URL in .env first."
+                "MINI_APP_URL не задан. Добавь его в .env."
             )
             return
         web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
         kb = ReplyKeyboardMarkup(
-            [[KeyboardButton("Открыть скидки", web_app=WebAppInfo(url=web_url))]],
+            [
+                [KeyboardButton("Открыть скидки", web_app=WebAppInfo(url=web_url))],
+                [KeyboardButton(self.COLLECT_NOW_BUTTON)],
+            ],
             resize_keyboard=True,
             one_time_keyboard=True,
         )
@@ -338,6 +463,17 @@ class VkusvillGroupBot:
         if update.message is None:
             return
         await update.message.reply_text("Клавиатура скрыта.", reply_markup=ReplyKeyboardRemove())
+
+    async def on_text_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        text = (update.message.text or "").strip()
+        if text != self.COLLECT_NOW_BUTTON:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        await self._finalize_impl(context.application)
+        await update.message.reply_text("Итог собран сейчас.")
 
     async def on_webapp_data(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or update.effective_user is None:
@@ -391,15 +527,12 @@ class VkusvillGroupBot:
             if payload_day and payload_day != day:
                 self._trace_webapp(f"stale_day payload_day={payload_day} day={day}")
                 await update.message.reply_text(
-                    f"Data is stale ({payload_day} vs {day}). Reopen Mini App via /app."
+                    f"Данные устарели ({payload_day} vs {day}). Открой Mini App заново через /app."
                 )
                 return
-            if payload_snapshot and payload_snapshot != snapshot_id:
+            snapshot_mismatch = bool(payload_snapshot and payload_snapshot != snapshot_id)
+            if snapshot_mismatch:
                 self._trace_webapp(f"stale_snapshot payload={payload_snapshot} actual={snapshot_id}")
-                await update.message.reply_text(
-                    "Data snapshot is outdated. Reopen Mini App via /app and submit again."
-                )
-                return
 
             qty_map = payload.get("qty") or {}
             selected_positive = 0
@@ -415,26 +548,32 @@ class VkusvillGroupBot:
 
             if touched == 0:
                 self._trace_webapp("all_choices_touched_0")
-                msg = "Nothing saved: no matching items for today's snapshot. Reopen Mini App via /app."
+                msg = "Ничего не сохранено: список уже обновился. Открой Mini App заново через /app."
                 await update.message.reply_text(msg)
                 bound_chat_id = self._get_chat_id()
                 current_chat = update.effective_chat.id if update.effective_chat else None
                 if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
                     await self._send(
                         context.application,
-                        f"{user_name}: selection not saved (stale snapshot). Please reopen /app and submit again.",
+                        f"{user_name}: выбор не сохранен (устаревший снимок). Нужен новый /app.",
                     )
                 return
 
             self._trace_webapp(f"all_choices_saved selected={selected_positive} touched={touched}")
-            msg = f"Saved: {selected_positive} selected items (updated {touched} entries)."
+            if snapshot_mismatch:
+                msg = (
+                    f"Сохранено: {selected_positive} товаров (обновлено {touched}). "
+                    "Часть позиций могла измениться после обновления, это нормально."
+                )
+            else:
+                msg = f"Сохранено: {selected_positive} товаров (обновлено {touched})."
             await update.message.reply_text(msg)
             bound_chat_id = self._get_chat_id()
             current_chat = update.effective_chat.id if update.effective_chat else None
             if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
                 await self._send(
                     context.application,
-                    f"{user_name}: {selected_positive} items selected (updated {touched}).",
+                    f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched}).",
                 )
             return
 
@@ -455,7 +594,7 @@ class VkusvillGroupBot:
         items = self.store.list_items(day)
         if not items:
             await query.edit_message_text(
-                "No discounts yet. Automatic update is scheduled daily at 10:00 (Europe/Moscow)."
+                f"Скидок пока нет. Автообновление: {self._collection_schedule_text()} (Europe/Moscow)."
             )
             return
 
@@ -543,7 +682,7 @@ class VkusvillGroupBot:
         totals = self.store.totals_by_item(day)
         if not totals:
             await update.message.reply_text(
-                "No items yet for today. Auto update runs daily at 10:00 (Europe/Moscow)."
+                f"На сегодня данных пока нет. Автообновление: {self._collection_schedule_text()} (Europe/Moscow)."
             )
             return
 
@@ -557,7 +696,9 @@ class VkusvillGroupBot:
     async def cart(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
             return
-        await update.message.reply_text("Scanning cart and matching with today discounts...")
+        if not await self._check_owner_or_reply(update):
+            return
+        await update.message.reply_text("Сканирую корзину и сверяю с сегодняшними скидками...")
 
         cmd = [
             sys.executable,
@@ -617,17 +758,28 @@ class VkusvillGroupBot:
         await update.message.reply_text("\n".join(lines)[:3900])
 
     async def finalize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_owner_or_reply(update):
+            return
         await self._finalize_impl(context.application)
         if update.message:
-            await update.message.reply_text("Final order prepared.")
+            await update.message.reply_text("Итоговый заказ сформирован.")
+
+    async def collectnow(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_owner_or_reply(update):
+            return
+        await self._finalize_impl(context.application)
+        if update.message:
+            await update.message.reply_text("Итог собран сейчас.")
 
     async def resetday(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
             return
+        if not await self._check_owner_or_reply(update):
+            return
         day = self._today()
         self.store.clear_day(day)
         await update.message.reply_text(
-            f"Day state cleared for {day}. Automatic update will refill items at 10:00 (Europe/Moscow)."
+            f"Состояние за {day} очищено. Автосбор снова заполнит товары по расписанию."
         )
 
     def _schedule_startup_collect_if_needed(self, app: Application) -> None:
@@ -663,18 +815,18 @@ class VkusvillGroupBot:
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
         if not payload["items"]:
-            await self._send(app, f"Deadline {day}. No one selected items.")
+            await self._send(app, f"Итог за {day}: никто не выбрал товары.")
             return
 
-        lines = [f"Final order for {day}:"]
+        lines = [f"Итоговый заказ за {day}:"]
         for row in payload["items"]:
             lines.append(
-                f"- {row['name']}: {int(row['qty'])} pcs x {float(row['discount_price']):.2f} RUB"
+                f"- {row['name']}: {int(row['qty'])} шт x {float(row['discount_price']):.2f} RUB"
             )
-        lines.append(f"Total: {payload['total_sum_discount_price']:.2f} RUB")
-        lines.append(f"File: {out_path}")
+        lines.append(f"Сумма: {payload['total_sum_discount_price']:.2f} RUB")
+        lines.append(f"Файл: {out_path}")
         if self.settings.dry_run:
-            lines.append("Mode: DRY_RUN (no auto checkout)")
+            lines.append("Режим: DRY_RUN (автооформление отключено)")
 
         await self._send(app, "\n".join(lines))
         await self._run_executor_if_needed(app, out_path)
@@ -683,7 +835,7 @@ class VkusvillGroupBot:
         if self.settings.dry_run:
             return
         if not self.settings.order_executor_command:
-            await self._send(app, "ORDER_EXECUTOR_COMMAND is not set. Auto checkout skipped.")
+            await self._send(app, "ORDER_EXECUTOR_COMMAND не задан. Автооформление пропущено.")
             return
 
         cmd = self.settings.order_executor_command.replace("{order_file}", str(out_path))
@@ -710,21 +862,29 @@ class VkusvillGroupBot:
         if update.message is None:
             return
         await update.message.reply_text(
-            "/bind - bind current chat\n"
-            "/shop - open scrollable showcase\n"
-            "/status - show current selections\n"
-            "/cart - scan cart and sort matched discounts\n"
-            "/finalize - prepare final order\n"
-            "/resetday - clear today items and votes\n"
-            "/app - show Mini App keyboard button\n"
-            "/hidekbd - hide custom keyboard\n"
-            "/help - help"
+            "/app - открыть Mini App\n"
+            "/status - текущие выборы\n"
+            "/where - диагностика чата/owner\n"
+            "/bind - привязать текущий чат (owner)\n"
+            "/collect - обновить скидки из ВкусВилл (owner)\n"
+            "/collectnow - собрать итоговый заказ сейчас (owner)\n"
+            "/finalize - собрать итоговый заказ (owner)\n"
+            "/resetday - очистить данные текущего дня (owner)\n"
+            "/cart - сверить корзину с сегодняшними скидками (owner)\n"
+            "/setowner - назначить/проверить owner\n"
+            "/selftest - быстрая проверка состояния (owner)\n"
+            "/hidekbd - скрыть клавиатуру\n"
+            "/help - справка"
         )
 
     def build_app(self) -> Application:
         app = Application.builder().token(self.settings.bot_token).build()
 
         app.add_handler(CommandHandler("bind", self.bind))
+        app.add_handler(CommandHandler("collect", self.collect))
+        app.add_handler(CommandHandler("setowner", self.setowner))
+        app.add_handler(CommandHandler("where", self.where))
+        app.add_handler(CommandHandler("selftest", self.selftest))
         app.add_handler(CommandHandler("shop", self.shop))
         app.add_handler(CommandHandler("browse", self.shop))
         app.add_handler(CommandHandler("app", self.app))
@@ -732,8 +892,10 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("status", self.status))
         app.add_handler(CommandHandler("cart", self.cart))
         app.add_handler(CommandHandler("finalize", self.finalize))
+        app.add_handler(CommandHandler("collectnow", self.collectnow))
         app.add_handler(CommandHandler("resetday", self.resetday))
         app.add_handler(CommandHandler("help", self.help))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_button))
         app.add_handler(CallbackQueryHandler(self.on_browser, pattern=r"^b\|"))
         app.add_handler(CallbackQueryHandler(self.on_vote_legacy, pattern=r"^v\|"))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.on_webapp_data))
