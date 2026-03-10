@@ -177,6 +177,92 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
     return items
 
 
+def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountItem]:
+    page.goto(url, wait_until="domcontentloaded", timeout=120_000)
+    page.wait_for_timeout(2200)
+
+    raw = page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+          const cards = Array.from(document.querySelectorAll('.js-datalayer-catalog-list-item[data-xmlid]'));
+          const rows = [];
+          for (const el of cards) {
+            const xmlid = (el.getAttribute('data-xmlid') || '').trim();
+            if (!xmlid) continue;
+            const name = norm((el.querySelector('.js-datalayer-catalog-list-name') || {}).innerText || '');
+            const priceNew = norm((el.querySelector('.js-datalayer-catalog-list-price') || {}).innerText || '');
+            const priceOld = norm((el.querySelector('.js-datalayer-catalog-list-price-old') || {}).innerText || '');
+            rows.push({ xmlid, name, priceNew, priceOld, text: norm(el.innerText || '') });
+          }
+          return rows;
+        }
+        """
+    )
+
+    items: list[DiscountItem] = []
+    seen: set[str] = set()
+    for row in raw:
+        xmlid = str(row.get("xmlid") or "").strip()
+        name = str(row.get("name") or "").strip()
+        if not xmlid or not name:
+            continue
+
+        prices = RUB_RE.findall(f"{row.get('priceNew') or ''} {row.get('priceOld') or ''} {row.get('text') or ''}")
+        parsed: list[float] = []
+        for token in prices:
+            try:
+                parsed.append(_parse_price(token))
+            except Exception:
+                continue
+        parsed = [p for p in parsed if 5 <= p <= 10000]
+        if not parsed:
+            continue
+        discount = min(parsed)
+        regular = max(parsed)
+        if regular <= discount:
+            continue
+
+        item_id = f"offers_{xmlid}"
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        items.append(
+            DiscountItem(
+                item_id=item_id,
+                name=name,
+                price=regular,
+                discount_price=discount,
+                source="vkusvill_offers_ready_food",
+            )
+        )
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _merge_items_unique(base: list[DiscountItem], extra: list[DiscountItem]) -> list[DiscountItem]:
+    merged: dict[str, DiscountItem] = {}
+    name_keys: set[str] = set()
+
+    def name_key(value: str) -> str:
+        return _normalize_ws(value).lower()
+
+    for item in base:
+        merged[item.item_id] = item
+        name_keys.add(name_key(item.name))
+
+    for item in extra:
+        if item.item_id in merged:
+            continue
+        if name_key(item.name) in name_keys:
+            continue
+        merged[item.item_id] = item
+        name_keys.add(name_key(item.name))
+
+    return list(merged.values())
+
+
 def _open_discounts_area(page) -> None:
     page.goto("https://vkusvill.ru/personal/", wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_timeout(1800)
@@ -463,6 +549,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--interactive-login", action="store_true")
     parser.add_argument("--max-items", type=int, default=24)
     parser.add_argument("--waves", type=int, default=1, help="How many waves to collect (1..3).")
+    parser.add_argument(
+        "--offers-ready-food-url",
+        default="",
+        help="Optional URL for extra 'Ваши скидки -> Готовая еда' collection.",
+    )
+    parser.add_argument("--offers-ready-food-max", type=int, default=9)
     return parser.parse_args()
 
 
@@ -483,6 +575,15 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
                 "Re-auth required. Debug saved to out/debug."
             )
         items = _collect_waves(page, "vkusvill_web_storage_state", waves=args.waves)
+        if args.offers_ready_food_url:
+            extra = _collect_offers_ready_food(
+                page,
+                url=args.offers_ready_food_url,
+                max_items=max(1, int(args.offers_ready_food_max)),
+            )
+            if extra:
+                _log(f"[collector] offers ready food: +{len(extra)} items")
+                items = _merge_items_unique(items, extra)
         browser.close()
     return items
 
@@ -566,6 +667,15 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                 _open_discounts_area(page)
             if _is_logged_in(page):
                 items = _collect_waves(page, "vkusvill_web_system_chrome", waves=args.waves)
+                if args.offers_ready_food_url:
+                    extra = _collect_offers_ready_food(
+                        page,
+                        url=args.offers_ready_food_url,
+                        max_items=max(1, int(args.offers_ready_food_max)),
+                    )
+                    if extra:
+                        _log(f"[collector] offers ready food: +{len(extra)} items")
+                        items = _merge_items_unique(items, extra)
                 context.close()
                 return items
             _save_debug(page, "system_chrome_not_logged_in")
@@ -575,6 +685,15 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                 "Login in Chrome first, then retry. Debug saved to out/debug."
             )
         items = _collect_waves(page, "vkusvill_web_system_chrome", waves=args.waves)
+        if args.offers_ready_food_url:
+            extra = _collect_offers_ready_food(
+                page,
+                url=args.offers_ready_food_url,
+                max_items=max(1, int(args.offers_ready_food_max)),
+            )
+            if extra:
+                _log(f"[collector] offers ready food: +{len(extra)} items")
+                items = _merge_items_unique(items, extra)
         context.close()
 
     return items

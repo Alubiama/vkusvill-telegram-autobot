@@ -57,12 +57,20 @@ class VkusvillGroupBot:
         markers = ("любим", "подобрали для вас", "назначить новый")
         return any(marker in title for marker in markers)
 
-    def _mini_groups(self, items: list[object]) -> tuple[list[dict], list[object]]:
+    @staticmethod
+    def _is_ready_food_offer(source: str) -> bool:
+        src = (source or "").lower()
+        return src.startswith("vkusvill_offers_ready_food")
+
+    def _mini_groups(self, items: list[object]) -> tuple[list[dict], list[object], list[object]]:
         favorites: list[object] = []
         regular: list[object] = []
+        ready_food: list[object] = []
         for item in items:
             if self._is_favorite_item(item.name, item.source):
                 favorites.append(item)
+            elif self._is_ready_food_offer(item.source):
+                ready_food.append(item)
             else:
                 regular.append(item)
 
@@ -78,7 +86,7 @@ class VkusvillGroupBot:
                     "items": chunk,
                 }
             )
-        return groups, favorites
+        return groups, favorites, ready_food[:9]
 
     def _build_mini_app_url(self, user_id: int | None) -> str | None:
         if not self.settings.mini_app_url:
@@ -95,7 +103,7 @@ class VkusvillGroupBot:
             for item in items:
                 your[item.item_id] = self.store.get_user_qty(day, user_id, item.item_id)
 
-        groups, favorites = self._mini_groups(items)
+        groups, favorites, ready_food = self._mini_groups(items)
 
         def pack_item(item: object) -> dict:
             return {
@@ -117,6 +125,7 @@ class VkusvillGroupBot:
                 for g in groups
             ],
             "favorite": [pack_item(item) for item in favorites[:1]],
+            "extra_ready_food": [pack_item(item) for item in ready_food],
             "items": [pack_item(item) for item in items],
             "totals": totals,
             "your": your,
@@ -134,6 +143,7 @@ class VkusvillGroupBot:
                         "day": day,
                         "groups": payload["groups"],
                         "favorite": payload["favorite"],
+                        "extra_ready_food": payload["extra_ready_food"],
                         "items": payload["items"],
                     },
                     ensure_ascii=False,

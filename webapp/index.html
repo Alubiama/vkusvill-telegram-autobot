@@ -187,7 +187,7 @@
 
     <section class="card">
       <div class="section-title">Товары на сегодня</div>
-      <div class="section-sub">3 подборки по 6. Любимый товар вынесен отдельно.</div>
+      <div class="section-sub" id="overviewSub">3 подборки по 6. Любимый товар вынесен отдельно.</div>
       <div id="tabs" class="tabs"></div>
     </section>
 
@@ -255,13 +255,18 @@
     const payloadFavorite = Array.isArray(payload.favorite)
       ? payload.favorite.map(unpackItem).filter(validItem)
       : [];
+    const payloadReadyFood = Array.isArray(payload.extra_ready_food)
+      ? payload.extra_ready_food.map(unpackItem).filter(validItem)
+      : [];
 
     function fallbackGroupsFromItems(items) {
       const favorites = [];
       const regular = [];
+      const readyFood = [];
       for (const item of items) {
         const src = item.source.toLowerCase();
         if (src.includes("favorite") || src.includes("fav")) favorites.push(item);
+        else if (src.startsWith("vkusvill_offers_ready_food")) readyFood.push(item);
         else regular.push(item);
       }
       regular.splice(18);
@@ -274,11 +279,12 @@
           type: "group",
         });
       }
-      return { groups, favorite: favorites.slice(0, 1) };
+      return { groups, favorite: favorites.slice(0, 1), readyFood: readyFood.slice(0, 24) };
     }
 
     let groups = [];
     let favoriteItems = [];
+    let readyFoodItems = [];
     if (payloadGroups.length) {
       groups = [0, 1, 2].map((idx) => {
         const g = payloadGroups[idx] || {};
@@ -291,10 +297,12 @@
         };
       });
       favoriteItems = payloadFavorite.slice(0, 1);
+      readyFoodItems = payloadReadyFood.slice(0, 24);
     } else {
       const fb = fallbackGroupsFromItems(fallbackItems);
       groups = fb.groups;
       favoriteItems = fb.favorite;
+      readyFoodItems = fb.readyFood;
     }
 
     const tabs = [...groups];
@@ -306,8 +314,30 @@
         type: "favorite",
       });
     }
+    if (readyFoodItems.length) {
+      tabs.push({
+        id: "ready_food",
+        title: "Готовая еда",
+        items: readyFoodItems,
+        type: "ready_food",
+      });
+    }
 
-    const allRealItems = [...groups.flatMap((g) => g.items), ...favoriteItems];
+    const allById = new Map();
+    for (const item of [...groups.flatMap((g) => g.items), ...favoriteItems, ...readyFoodItems]) {
+      if (!item?.item_id) continue;
+      if (!allById.has(item.item_id)) allById.set(item.item_id, item);
+    }
+    const allRealItems = Array.from(allById.values());
+
+    function updateOverview() {
+      const el = document.getElementById("overviewSub");
+      if (!el) return;
+      const parts = ["3 подборки по 6"];
+      if (favoriteItems.length) parts.push("любимый товар отдельно");
+      if (readyFoodItems.length) parts.push(`готовая еда: ${readyFoodItems.length}`);
+      el.textContent = `${parts.join(", ")}.`;
+    }
     const selected = {};
     for (const item of allRealItems) {
       const initial = Number((payload.your || {})[item.item_id] || 0);
@@ -469,6 +499,7 @@
     document.getElementById("closeBtn").addEventListener("click", () => tg?.close());
 
     updateSummary();
+    updateOverview();
     renderTabs();
     renderGroup();
   </script>
