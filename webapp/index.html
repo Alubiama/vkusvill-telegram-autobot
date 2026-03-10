@@ -31,7 +31,7 @@
     }
     .shell {
       width: 100%;
-      max-width: 430px;
+      max-width: 390px;
       margin: 0 auto;
       display: grid;
       gap: 8px;
@@ -72,8 +72,9 @@
     }
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 5px;
-      overflow-x: auto;
+      overflow-x: hidden;
       padding-bottom: 2px;
     }
     .tab {
@@ -104,7 +105,7 @@
       min-width: 0;
     }
     .name {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       line-height: 1.2;
       margin-bottom: 6px;
@@ -123,7 +124,7 @@
       background: #fff;
     }
     .price-label { font-size: 11px; color: var(--muted); }
-    .price-val { font-size: 14px; font-weight: 700; }
+    .price-val { font-size: 13px; font-weight: 700; }
     .discount { color: var(--ok); }
     .toggle {
       width: 100%;
@@ -131,7 +132,7 @@
       border-radius: 9px;
       background: #fff;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       padding: 8px 7px;
       cursor: pointer;
@@ -161,7 +162,7 @@
       border-radius: 9px;
       background: #fff;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       padding: 8px 7px;
       cursor: pointer;
@@ -205,7 +206,7 @@
   <div class="shell">
     <section class="card top">
       <div>
-        <div class="t1">Vkusvill Mini App</div>
+        <div class="t1" id="appMeta">Vkusvill Mini App</div>
         <div class="t2" id="day">-</div>
       </div>
       <div class="pill" id="summary">Выбрано: 0</div>
@@ -231,6 +232,7 @@
   </div>
 
   <script>
+    const BUILD_ID = "b-20260310-4";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -274,6 +276,7 @@
     const day = payload.day || today;
     const snapshotId = String(payload.snapshot_id || "");
     document.getElementById("day").textContent = day;
+    document.getElementById("appMeta").textContent = `Vkusvill Mini App · ${BUILD_ID}`;
 
     const fallbackItems = Array.isArray(payload.items)
       ? payload.items.map(unpackItem).filter(validItem)
