@@ -214,12 +214,31 @@ def _click_refresh_discounts(page) -> bool:
         """
         () => {
           const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim().toLowerCase();
+          const directSelectors = [
+            '.js-lk-inshop-refresh',
+            '.js-lk-inshop-change',
+            '.js-lk-inshop-reroll',
+            '.js-lk-specials-refresh',
+            '[data-testid*="refresh"]',
+            '[class*="inshop"][class*="refresh"]',
+            '[class*="special"][class*="refresh"]',
+            '[class*="lk"][class*="refresh"]',
+          ];
+          for (const sel of directSelectors) {
+            const nodes = Array.from(document.querySelectorAll(sel));
+            for (const el of nodes) {
+              if (!el || el.offsetParent === null) continue;
+              el.click();
+              return true;
+            }
+          }
           const phrases = [
             'обновить 6 скидок',
             'обновить скидки',
             'обновить подборку',
             'сменить 6 скидок',
             'поменять 6 скидок',
+            'сменить подборку',
             'обновить',
           ];
           const nodes = Array.from(document.querySelectorAll('button, a, [role="button"], div, span'));

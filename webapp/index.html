@@ -137,6 +137,12 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .toggle:disabled {
+      opacity: 0.7;
+      cursor: default;
+      color: var(--muted);
+      background: #f6f8f4;
+    }
     .actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -181,7 +187,7 @@
 
     <section class="card">
       <div class="section-title">Товары на сегодня</div>
-      <div class="section-sub">Выбери нужные товары и отправь одним нажатием.</div>
+      <div class="section-sub">3 подборки по 6. Любимый товар вынесен отдельно.</div>
       <div id="tabs" class="tabs"></div>
     </section>
 
@@ -218,6 +224,20 @@
       }
     }
 
+    function unpackItem(x) {
+      return {
+        item_id: String(x?.i || x?.item_id || ""),
+        name: String(x?.n || x?.name || ""),
+        price: Number(x?.p ?? x?.price ?? 0),
+        discount_price: Number(x?.d ?? x?.discount_price ?? 0),
+        source: String(x?.s || x?.source || ""),
+      };
+    }
+
+    function validItem(x) {
+      return Boolean(x.item_id && x.name);
+    }
+
     const params = new URLSearchParams(window.location.search);
     const hasDataParam = params.has("data");
     const payload = decodeBase64UrlJson(params.get("data")) || {};
@@ -227,25 +247,16 @@
     const day = payload.day || today;
     document.getElementById("day").textContent = day;
 
-    const items = Array.isArray(payload.items) ? payload.items.map((x) => ({
-      item_id: String(x.i || x.item_id || ""),
-      name: String(x.n || x.name || ""),
-      price: Number(x.p ?? x.price ?? 0),
-      discount_price: Number(x.d ?? x.discount_price ?? 0),
-      source: String(x.s || x.source || ""),
-    })).filter((x) => x.item_id && x.name) : [];
+    const fallbackItems = Array.isArray(payload.items)
+      ? payload.items.map(unpackItem).filter(validItem)
+      : [];
 
-    const selected = {};
-    for (const item of items) {
-      const initial = Number((payload.your || {})[item.item_id] || 0);
-      selected[item.item_id] = initial > 0 ? 1 : 0;
-    }
+    const payloadGroups = Array.isArray(payload.groups) ? payload.groups : [];
+    const payloadFavorite = Array.isArray(payload.favorite)
+      ? payload.favorite.map(unpackItem).filter(validItem)
+      : [];
 
-    function rub(value) {
-      return `${Number(value).toFixed(2)} RUB`;
-    }
-
-    function buildGroups() {
+    function fallbackGroupsFromItems(items) {
       const favorites = [];
       const regular = [];
       for (const item of items) {
@@ -253,30 +264,61 @@
         if (src.includes("favorite") || src.includes("fav")) favorites.push(item);
         else regular.push(item);
       }
-
+      regular.splice(18);
       const groups = [];
-      for (let i = 0; i < regular.length; i += 6) {
-        const slice = regular.slice(i, i + 6);
+      for (let i = 0; i < 3; i++) {
         groups.push({
-          key: `g${Math.floor(i / 6) + 1}`,
-          title: `Подборка ${Math.floor(i / 6) + 1}`,
-          subtitle: `${slice.length} товаров`,
-          items: slice,
+          id: `g${i + 1}`,
+          title: `Подборка ${i + 1}`,
+          items: regular.slice(i * 6, i * 6 + 6),
+          type: "group",
         });
       }
-      if (favorites.length) {
-        groups.push({
-          key: "fav",
-          title: "Любимый товар",
-          subtitle: `${favorites.length} товаров`,
-          items: favorites,
-        });
-      }
-      return groups;
+      return { groups, favorite: favorites.slice(0, 1) };
     }
 
-    const groups = buildGroups();
-    let activeGroupIdx = 0;
+    let groups = [];
+    let favoriteItems = [];
+    if (payloadGroups.length) {
+      groups = [0, 1, 2].map((idx) => {
+        const g = payloadGroups[idx] || {};
+        const gItems = Array.isArray(g.items) ? g.items.map(unpackItem).filter(validItem) : [];
+        return {
+          id: String(g.id || `g${idx + 1}`),
+          title: String(g.title || `Подборка ${idx + 1}`),
+          items: gItems.slice(0, 6),
+          type: "group",
+        };
+      });
+      favoriteItems = payloadFavorite.slice(0, 1);
+    } else {
+      const fb = fallbackGroupsFromItems(fallbackItems);
+      groups = fb.groups;
+      favoriteItems = fb.favorite;
+    }
+
+    const tabs = [...groups];
+    if (favoriteItems.length) {
+      tabs.push({
+        id: "favorite",
+        title: "Любимый",
+        items: favoriteItems,
+        type: "favorite",
+      });
+    }
+
+    const allRealItems = [...groups.flatMap((g) => g.items), ...favoriteItems];
+    const selected = {};
+    for (const item of allRealItems) {
+      const initial = Number((payload.your || {})[item.item_id] || 0);
+      selected[item.item_id] = initial > 0 ? 1 : 0;
+    }
+
+    let activeTab = tabs.length ? tabs[0].id : "g1";
+
+    function rub(value) {
+      return `${Number(value).toFixed(2)} RUB`;
+    }
 
     function selectedCount() {
       return Object.values(selected).reduce((acc, n) => acc + Number(n || 0), 0);
@@ -287,6 +329,7 @@
     }
 
     function toggleItem(itemId) {
+      if (!itemId) return;
       selected[itemId] = selected[itemId] ? 0 : 1;
       renderGroup();
       updateSummary();
@@ -295,19 +338,78 @@
     function renderTabs() {
       const root = document.getElementById("tabs");
       root.innerHTML = "";
-      if (!groups.length) return;
-      for (let i = 0; i < groups.length; i++) {
-        const g = groups[i];
+      for (const tab of tabs) {
         const btn = document.createElement("button");
-        btn.className = `tab${i === activeGroupIdx ? " active" : ""}`;
-        btn.textContent = `${g.title} (${g.items.length})`;
+        btn.className = `tab${tab.id === activeTab ? " active" : ""}`;
+        btn.textContent = `${tab.title} (${tab.items.length})`;
         btn.addEventListener("click", () => {
-          activeGroupIdx = i;
+          activeTab = tab.id;
           renderTabs();
           renderGroup();
         });
         root.appendChild(btn);
       }
+    }
+
+    function renderPlaceholder(itemsEl, idx) {
+      const wrap = document.createElement("article");
+      wrap.className = "item";
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = `Слот ${idx + 1}: ожидаем после обновления`;
+      wrap.appendChild(name);
+
+      const prices = document.createElement("div");
+      prices.className = "price-row";
+      prices.innerHTML = `
+        <div class="price-box">
+          <div class="price-label">Обычная</div>
+          <div class="price-val">--</div>
+        </div>
+        <div class="price-box">
+          <div class="price-label">Со скидкой</div>
+          <div class="price-val discount">--</div>
+        </div>
+      `;
+      wrap.appendChild(prices);
+
+      const t = document.createElement("button");
+      t.className = "toggle";
+      t.textContent = "Ожидание";
+      t.disabled = true;
+      wrap.appendChild(t);
+      itemsEl.appendChild(wrap);
+    }
+
+    function renderRealItem(itemsEl, item) {
+      const wrap = document.createElement("article");
+      wrap.className = "item";
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = item.name;
+      wrap.appendChild(name);
+
+      const prices = document.createElement("div");
+      prices.className = "price-row";
+      prices.innerHTML = `
+        <div class="price-box">
+          <div class="price-label">Обычная</div>
+          <div class="price-val">${rub(item.price)}</div>
+        </div>
+        <div class="price-box">
+          <div class="price-label">Со скидкой</div>
+          <div class="price-val discount">${rub(item.discount_price)}</div>
+        </div>
+      `;
+      wrap.appendChild(prices);
+
+      const t = document.createElement("button");
+      t.className = `toggle${selected[item.item_id] ? " active" : ""}`;
+      t.textContent = selected[item.item_id] ? "Выбрано" : "Выбрать";
+      t.addEventListener("click", () => toggleItem(item.item_id));
+      wrap.appendChild(t);
+      itemsEl.appendChild(wrap);
     }
 
     function renderGroup() {
@@ -316,7 +418,8 @@
       const itemsEl = document.getElementById("items");
       itemsEl.innerHTML = "";
 
-      if (!items.length || !groups.length) {
+      const tab = tabs.find((x) => x.id === activeTab) || tabs[0];
+      if (!tab) {
         titleEl.textContent = "Нет товаров";
         subEl.textContent = "";
         const empty = document.createElement("div");
@@ -330,46 +433,27 @@
         return;
       }
 
-      const g = groups[activeGroupIdx] || groups[0];
-      titleEl.textContent = g.title;
-      subEl.textContent = g.subtitle;
+      titleEl.textContent = tab.title;
+      if (tab.type === "group") {
+        subEl.textContent = `${tab.items.length}/6 товаров`;
+      } else {
+        subEl.textContent = `${tab.items.length} товаров`;
+      }
 
-      for (const item of g.items) {
-        const wrap = document.createElement("article");
-        wrap.className = "item";
+      for (const item of tab.items) {
+        renderRealItem(itemsEl, item);
+      }
 
-        const name = document.createElement("div");
-        name.className = "name";
-        name.textContent = item.name;
-        wrap.appendChild(name);
-
-        const prices = document.createElement("div");
-        prices.className = "price-row";
-        prices.innerHTML = `
-          <div class="price-box">
-            <div class="price-label">Обычная</div>
-            <div class="price-val">${rub(item.price)}</div>
-          </div>
-          <div class="price-box">
-            <div class="price-label">Со скидкой</div>
-            <div class="price-val discount">${rub(item.discount_price)}</div>
-          </div>
-        `;
-        wrap.appendChild(prices);
-
-        const t = document.createElement("button");
-        t.className = `toggle${selected[item.item_id] ? " active" : ""}`;
-        t.textContent = selected[item.item_id] ? "Выбрано" : "Выбрать";
-        t.addEventListener("click", () => toggleItem(item.item_id));
-        wrap.appendChild(t);
-
-        itemsEl.appendChild(wrap);
+      if (tab.type === "group" && tab.items.length < 6) {
+        for (let idx = tab.items.length; idx < 6; idx++) {
+          renderPlaceholder(itemsEl, idx);
+        }
       }
     }
 
     function sendAll() {
       const qty = {};
-      for (const item of items) {
+      for (const item of allRealItems) {
         qty[item.item_id] = selected[item.item_id] ? 1 : 0;
       }
       const payloadOut = { type: "all_choices", day, qty };

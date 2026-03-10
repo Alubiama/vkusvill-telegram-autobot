@@ -48,6 +48,38 @@ class VkusvillGroupBot:
             return
         await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
 
+    @staticmethod
+    def _is_favorite_item(name: str, source: str) -> bool:
+        src = (source or "").lower()
+        if "favorite" in src or "fav" in src:
+            return True
+        title = (name or "").lower()
+        markers = ("любим", "подобрали для вас", "назначить новый")
+        return any(marker in title for marker in markers)
+
+    def _mini_groups(self, items: list[object]) -> tuple[list[dict], list[object]]:
+        favorites: list[object] = []
+        regular: list[object] = []
+        for item in items:
+            if self._is_favorite_item(item.name, item.source):
+                favorites.append(item)
+            else:
+                regular.append(item)
+
+        regular = regular[:18]
+        groups: list[dict] = []
+        for idx in range(3):
+            start = idx * 6
+            chunk = regular[start : start + 6]
+            groups.append(
+                {
+                    "id": f"g{idx + 1}",
+                    "title": f"Подборка {idx + 1}",
+                    "items": chunk,
+                }
+            )
+        return groups, favorites
+
     def _build_mini_app_url(self, user_id: int | None) -> str | None:
         if not self.settings.mini_app_url:
             return None
@@ -63,18 +95,29 @@ class VkusvillGroupBot:
             for item in items:
                 your[item.item_id] = self.store.get_user_qty(day, user_id, item.item_id)
 
+        groups, favorites = self._mini_groups(items)
+
+        def pack_item(item: object) -> dict:
+            return {
+                "i": item.item_id,
+                "n": item.name,
+                "p": float(item.price),
+                "d": float(item.discount_price),
+                "s": item.source,
+            }
+
         payload = {
             "day": day,
-            "items": [
+            "groups": [
                 {
-                    "i": item.item_id,
-                    "n": item.name,
-                    "p": float(item.price),
-                    "d": float(item.discount_price),
-                    "s": item.source,
+                    "id": g["id"],
+                    "title": g["title"],
+                    "items": [pack_item(item) for item in g["items"]],
                 }
-                for item in items
+                for g in groups
             ],
+            "favorite": [pack_item(item) for item in favorites[:1]],
+            "items": [pack_item(item) for item in items],
             "totals": totals,
             "your": your,
         }
@@ -87,7 +130,12 @@ class VkusvillGroupBot:
         if len(packed) > 7000:
             packed = base64.urlsafe_b64encode(
                 json.dumps(
-                    {"day": day, "items": payload["items"]},
+                    {
+                        "day": day,
+                        "groups": payload["groups"],
+                        "favorite": payload["favorite"],
+                        "items": payload["items"],
+                    },
                     ensure_ascii=False,
                     separators=(",", ":"),
                 ).encode("utf-8")
