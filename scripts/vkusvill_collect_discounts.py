@@ -344,7 +344,7 @@ def _click_refresh_discounts(page) -> bool:
         _log("[collector] refresh updated cards")
     else:
         _log("[collector] refresh did not change cards")
-    return True
+    return changed
 
 
 def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
@@ -360,9 +360,18 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
         _log(f"[collector] merged unique items: {len(merged)}")
         if wave_idx == total_waves - 1:
             break
-        if not _click_refresh_discounts(page):
-            _save_debug(page, f"refresh_not_found_wave_{wave_idx + 1}")
-            break
+        changed = _click_refresh_discounts(page)
+        if not changed:
+            # Fallback: reopen the section and try one more time.
+            _log("[collector] refresh unchanged, retrying after reopen")
+            try:
+                _open_discounts_area(page)
+            except Exception:
+                pass
+            changed = _click_refresh_discounts(page)
+        if not changed:
+            _save_debug(page, f"refresh_not_changed_wave_{wave_idx + 1}")
+            # Continue anyway to collect current state for transparency.
     return list(merged.values())
 
 
