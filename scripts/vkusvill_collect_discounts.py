@@ -236,7 +236,9 @@ def _click_refresh_discounts(page) -> bool:
         """
     )
     if not clicked:
+        print("[collector] refresh button not found")
         return False
+    print("[collector] refresh click sent")
 
     page.wait_for_timeout(1600)
     # Some flows show a confirmation button.
@@ -265,13 +267,17 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
     merged: dict[str, DiscountItem] = {}
     total_waves = max(1, waves)
     for wave_idx in range(total_waves):
+        print(f"[collector] wave {wave_idx + 1}/{total_waves}: collecting")
         _open_discounts_area(page)
         current = _collect_from_dom(page, source)
+        print(f"[collector] wave {wave_idx + 1}: found {len(current)} items")
         for item in current:
             merged.setdefault(item.item_id, item)
+        print(f"[collector] merged unique items: {len(merged)}")
         if wave_idx == total_waves - 1:
             break
         if not _click_refresh_discounts(page):
+            _save_debug(page, f"refresh_not_found_wave_{wave_idx + 1}")
             break
     return list(merged.values())
 
