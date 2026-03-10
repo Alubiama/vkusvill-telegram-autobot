@@ -208,6 +208,74 @@ def _open_discounts_area(page) -> None:
             continue
 
 
+def _click_refresh_discounts(page) -> bool:
+    # Try to click any visible refresh control for personal "6 discounts".
+    clicked = page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim().toLowerCase();
+          const phrases = [
+            'обновить 6 скидок',
+            'обновить скидки',
+            'обновить подборку',
+            'сменить 6 скидок',
+            'поменять 6 скидок',
+            'обновить',
+          ];
+          const nodes = Array.from(document.querySelectorAll('button, a, [role="button"], div, span'));
+          for (const el of nodes) {
+            const txt = norm(el.innerText);
+            if (!txt || el.offsetParent === null) continue;
+            if (phrases.some((p) => txt.includes(p))) {
+              el.click();
+              return true;
+            }
+          }
+          return false;
+        }
+        """
+    )
+    if not clicked:
+        return False
+
+    page.wait_for_timeout(1600)
+    # Some flows show a confirmation button.
+    page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim().toLowerCase();
+          const phrases = ['подтвердить', 'да, обновить', 'обновить', 'ок'];
+          const nodes = Array.from(document.querySelectorAll('button, [role="button"]'));
+          for (const el of nodes) {
+            const txt = norm(el.innerText);
+            if (!txt || el.offsetParent === null) continue;
+            if (phrases.some((p) => txt === p || txt.includes(p))) {
+              el.click();
+              return;
+            }
+          }
+        }
+        """
+    )
+    page.wait_for_timeout(2600)
+    return True
+
+
+def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
+    merged: dict[str, DiscountItem] = {}
+    total_waves = max(1, waves)
+    for wave_idx in range(total_waves):
+        _open_discounts_area(page)
+        current = _collect_from_dom(page, source)
+        for item in current:
+            merged.setdefault(item.item_id, item)
+        if wave_idx == total_waves - 1:
+            break
+        if not _click_refresh_discounts(page):
+            break
+    return list(merged.values())
+
+
 def _is_logged_in(page) -> bool:
     text = page.inner_text("body")
     lowered = text.lower()
@@ -240,6 +308,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--interactive-login", action="store_true")
     parser.add_argument("--max-items", type=int, default=24)
+    parser.add_argument("--waves", type=int, default=1, help="How many waves to collect (1..3).")
     return parser.parse_args()
 
 
@@ -259,7 +328,7 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
                 "VkusVill is not logged in for storage_state session. "
                 "Re-auth required. Debug saved to out/debug."
             )
-        items = _collect_from_dom(page, "vkusvill_web_storage_state")
+        items = _collect_waves(page, "vkusvill_web_storage_state", waves=args.waves)
         browser.close()
     return items
 
@@ -326,7 +395,7 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                             pass
                 _open_discounts_area(page)
             if _is_logged_in(page):
-                items = _collect_from_dom(page, "vkusvill_web_system_chrome")
+                items = _collect_waves(page, "vkusvill_web_system_chrome", waves=args.waves)
                 context.close()
                 return items
             _save_debug(page, "system_chrome_not_logged_in")
@@ -335,7 +404,7 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                 "VkusVill account is not logged in in selected Chrome profile. "
                 "Login in Chrome first, then retry. Debug saved to out/debug."
             )
-        items = _collect_from_dom(page, "vkusvill_web_system_chrome")
+        items = _collect_waves(page, "vkusvill_web_system_chrome", waves=args.waves)
         context.close()
 
     return items
@@ -343,6 +412,7 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
 
 def main() -> None:
     args = parse_args()
+    args.waves = max(1, min(int(args.waves), 3))
     out_path = Path(args.out_file)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
