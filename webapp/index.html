@@ -113,7 +113,7 @@
     }
     .price-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 6px;
       margin-bottom: 6px;
     }
@@ -441,11 +441,7 @@
       prices.className = "price-row";
       prices.innerHTML = `
         <div class="price-box">
-          <div class="price-label">Обычная</div>
-          <div class="price-val">--</div>
-        </div>
-        <div class="price-box">
-          <div class="price-label">Со скидкой</div>
+          <div class="price-label">Цена</div>
           <div class="price-val discount">--</div>
         </div>
       `;
@@ -470,14 +466,11 @@
 
       const prices = document.createElement("div");
       prices.className = "price-row";
+      const currentPrice = Number(item.discount_price || item.price || 0);
       prices.innerHTML = `
         <div class="price-box">
-          <div class="price-label">Обычная</div>
-          <div class="price-val">${rub(item.price)}</div>
-        </div>
-        <div class="price-box">
-          <div class="price-label">Со скидкой</div>
-          <div class="price-val discount">${rub(item.discount_price)}</div>
+          <div class="price-label">Цена</div>
+          <div class="price-val discount">${rub(currentPrice)}</div>
         </div>
       `;
       wrap.appendChild(prices);
@@ -542,7 +535,7 @@
       const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
       try {
         tg?.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен. Дождись сообщения от бота в чате.", "ok");
+        setSendState("Выбор отправлен боту. В группе придет подтверждение: Saved: ...", "ok");
       } catch (_err) {
         setSendState("Не удалось отправить выбор. Открой /app и попробуй снова.", "err");
       } finally {
