@@ -7,11 +7,13 @@ import logging
 import shlex
 import subprocess
 import sys
+import zlib
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
+from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -115,71 +117,56 @@ class VkusvillGroupBot:
         if not items:
             return self.settings.mini_app_url
 
-        totals = {row["item_id"]: int(row["qty"]) for row in self.store.totals_by_item(day)}
-        your: dict[str, int] = {}
-        if user_id is not None:
-            for item in items:
-                your[item.item_id] = self.store.get_user_qty(day, user_id, item.item_id)
-
         groups, favorites, ready_food = self._mini_groups(items)
         snapshot_id = self._snapshot_id(items, day)
         regular_count = sum(len(g["items"]) for g in groups)
 
-        def pack_item(item: object) -> dict:
-            return {
-                "i": item.item_id,
-                "n": item.name,
-                "p": float(item.price),
-                "d": float(item.discount_price),
-                "s": item.source,
-            }
+        # Compact payload: dictionary of unique items + group indexes.
+        # This keeps URL safely short for Telegram WebApp buttons.
+        unique_items: list[object] = []
+        index_by_item_id: dict[str, int] = {}
 
-        payload = {
-            "day": day,
-            "snapshot_id": snapshot_id,
-            "groups": [
-                {
-                    "id": g["id"],
-                    "title": g["title"],
-                    "items": [pack_item(item) for item in g["items"]],
-                }
-                for g in groups
+        def register(item: object) -> int:
+            item_id = str(item.item_id)
+            idx = index_by_item_id.get(item_id)
+            if idx is not None:
+                return idx
+            idx = len(unique_items)
+            unique_items.append(item)
+            index_by_item_id[item_id] = idx
+            return idx
+
+        group_indexes: list[list[int]] = []
+        for g in groups:
+            group_indexes.append([register(item) for item in g["items"]])
+        favorite_indexes = [register(item) for item in favorites[:1]]
+        ready_food_indexes = [register(item) for item in ready_food]
+
+        compact_payload = {
+            "d": day,
+            "sid": snapshot_id,
+            "m": [
+                [str(item.item_id), str(item.name), float(item.discount_price)]
+                for item in unique_items
             ],
-            "favorite": [pack_item(item) for item in favorites[:1]],
-            "extra_ready_food": [pack_item(item) for item in ready_food],
-            "items": [pack_item(item) for item in items],
-            "totals": totals,
-            "your": your,
-            "regular_count": regular_count,
-            "regular_capacity": 18,
+            "g": group_indexes,
+            "f": favorite_indexes,
+            "r": ready_food_indexes,
+            "rc": regular_count,
+            "cap": 18,
         }
 
-        packed = base64.urlsafe_b64encode(
-            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        ).decode("ascii").rstrip("=")
-
-        # Keep URL reasonably short for Telegram clients.
-        if len(packed) > 7000:
-            packed = base64.urlsafe_b64encode(
-                json.dumps(
-                    {
-                        "day": day,
-                        "snapshot_id": payload["snapshot_id"],
-                        "groups": payload["groups"],
-                        "favorite": payload["favorite"],
-                        "extra_ready_food": payload["extra_ready_food"],
-                        "items": payload["items"],
-                        "regular_count": payload["regular_count"],
-                        "regular_capacity": payload["regular_capacity"],
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            ).decode("ascii").rstrip("=")
+        raw_payload = json.dumps(
+            compact_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        packed = base64.urlsafe_b64encode(zlib.compress(raw_payload, level=9)).decode("ascii").rstrip("=")
 
         parts = urlsplit(self.settings.mini_app_url)
         query = dict(parse_qsl(parts.query, keep_blank_values=True))
         query["data"] = packed
+        query["enc"] = "z"
         query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
@@ -334,12 +321,23 @@ class VkusvillGroupBot:
             )
             return
         web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
-        await update.message.reply_text(
-            "Open app window:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Open App Window", web_app=WebAppInfo(url=web_url))]]
-            ),
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton("Открыть скидки", web_app=WebAppInfo(url=web_url))]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
         )
+        await update.message.reply_text(
+            (
+                "Открой Mini App кнопкой ниже.\n"
+                "Важно: выбор надежно отправляется в бота именно через эту кнопку."
+            ),
+            reply_markup=kb,
+        )
+
+    async def hidekbd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        await update.message.reply_text("Клавиатура скрыта.", reply_markup=ReplyKeyboardRemove())
 
     async def on_webapp_data(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or update.effective_user is None:
@@ -718,7 +716,8 @@ class VkusvillGroupBot:
             "/cart - scan cart and sort matched discounts\n"
             "/finalize - prepare final order\n"
             "/resetday - clear today items and votes\n"
-            "/app - open Mini App button (if URL configured)\n"
+            "/app - show Mini App keyboard button\n"
+            "/hidekbd - hide custom keyboard\n"
             "/help - help"
         )
 
@@ -729,6 +728,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("shop", self.shop))
         app.add_handler(CommandHandler("browse", self.shop))
         app.add_handler(CommandHandler("app", self.app))
+        app.add_handler(CommandHandler("hidekbd", self.hidekbd))
         app.add_handler(CommandHandler("status", self.status))
         app.add_handler(CommandHandler("cart", self.cart))
         app.add_handler(CommandHandler("finalize", self.finalize))

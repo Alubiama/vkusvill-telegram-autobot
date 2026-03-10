@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vkusvill Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
   <style>
     :root {
       --bg0: #f4f1e8;
@@ -232,21 +233,38 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260310-5";
+    const BUILD_ID = "b-20260310-6";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
       tg.ready();
     }
 
+    function base64UrlToBytes(raw) {
+      const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+      const b64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+      const binary = atob(b64);
+      return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    }
+
     function decodeBase64UrlJson(raw) {
       if (!raw) return null;
       try {
-        const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
-        const b64 = padded.replace(/-/g, "+").replace(/_/g, "/");
-        const binary = atob(b64);
-        const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+        const bytes = base64UrlToBytes(raw);
         const text = new TextDecoder("utf-8").decode(bytes);
+        return JSON.parse(text);
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function decodeCompressedBase64UrlJson(raw) {
+      if (!raw) return null;
+      try {
+        const bytes = base64UrlToBytes(raw);
+        if (!window.pako || typeof window.pako.inflate !== "function") return null;
+        const inflated = window.pako.inflate(bytes);
+        const text = new TextDecoder("utf-8").decode(inflated);
         return JSON.parse(text);
       } catch (_err) {
         return null;
@@ -269,12 +287,16 @@
 
     const params = new URLSearchParams(window.location.search);
     const hasDataParam = params.has("data");
-    const payload = decodeBase64UrlJson(params.get("data")) || {};
+    const payload = (
+      params.get("enc") === "z"
+        ? decodeCompressedBase64UrlJson(params.get("data"))
+        : decodeBase64UrlJson(params.get("data"))
+    ) || decodeBase64UrlJson(params.get("data")) || {};
 
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const day = payload.day || today;
-    const snapshotId = String(payload.snapshot_id || "");
+    const day = payload.day || payload.d || today;
+    const snapshotId = String(payload.snapshot_id || payload.sid || "");
     document.getElementById("day").textContent = day;
     document.getElementById("appMeta").textContent = `Vkusvill Mini App · ${BUILD_ID}`;
 
@@ -289,6 +311,10 @@
     const payloadReadyFood = Array.isArray(payload.extra_ready_food)
       ? payload.extra_ready_food.map(unpackItem).filter(validItem)
       : [];
+    const compactMap = Array.isArray(payload.m) ? payload.m : [];
+    const compactGroups = Array.isArray(payload.g) ? payload.g : [];
+    const compactFavorite = Array.isArray(payload.f) ? payload.f : [];
+    const compactReadyFood = Array.isArray(payload.r) ? payload.r : [];
 
     function fallbackGroupsFromItems(items) {
       const favorites = [];
@@ -316,7 +342,31 @@
     let groups = [];
     let favoriteItems = [];
     let readyFoodItems = [];
-    if (payloadGroups.length) {
+    if (compactMap.length && compactGroups.length) {
+      const mapItem = (idx) => {
+        const row = compactMap[Number(idx)];
+        if (!Array.isArray(row) || row.length < 3) return null;
+        return {
+          item_id: String(row[0] || ""),
+          name: String(row[1] || ""),
+          price: 0,
+          discount_price: Number(row[2] || 0),
+          source: "",
+        };
+      };
+      groups = [0, 1, 2].map((idx) => {
+        const ids = Array.isArray(compactGroups[idx]) ? compactGroups[idx] : [];
+        const gItems = ids.map(mapItem).filter(validItem);
+        return {
+          id: `g${idx + 1}`,
+          title: `РџРѕРґР±РѕСЂРєР° ${idx + 1}`,
+          items: gItems.slice(0, 6),
+          type: "group",
+        };
+      });
+      favoriteItems = compactFavorite.map(mapItem).filter(validItem).slice(0, 1);
+      readyFoodItems = compactReadyFood.map(mapItem).filter(validItem).slice(0, 24);
+    } else if (payloadGroups.length) {
       groups = [0, 1, 2].map((idx) => {
         const g = payloadGroups[idx] || {};
         const gItems = Array.isArray(g.items) ? g.items.map(unpackItem).filter(validItem) : [];
@@ -364,8 +414,8 @@
     function updateOverview() {
       const el = document.getElementById("overviewSub");
       if (!el) return;
-      const regularCount = Number(payload.regular_count ?? groups.reduce((acc, g) => acc + g.items.length, 0));
-      const regularCapacity = Number(payload.regular_capacity ?? 18);
+      const regularCount = Number(payload.regular_count ?? payload.rc ?? groups.reduce((acc, g) => acc + g.items.length, 0));
+      const regularCapacity = Number(payload.regular_capacity ?? payload.cap ?? 18);
       const parts = [`3 подборки по 6 (${regularCount}/${regularCapacity})`];
       if (favoriteItems.length) parts.push("любимый товар отдельно");
       if (regularCount < regularCapacity) {
