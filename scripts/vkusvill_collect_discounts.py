@@ -243,22 +243,14 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
 
 def _merge_items_unique(base: list[DiscountItem], extra: list[DiscountItem]) -> list[DiscountItem]:
     merged: dict[str, DiscountItem] = {}
-    name_keys: set[str] = set()
-
-    def name_key(value: str) -> str:
-        return _normalize_ws(value).lower()
 
     for item in base:
         merged[item.item_id] = item
-        name_keys.add(name_key(item.name))
 
     for item in extra:
         if item.item_id in merged:
             continue
-        if name_key(item.name) in name_keys:
-            continue
         merged[item.item_id] = item
-        name_keys.add(name_key(item.name))
 
     return list(merged.values())
 

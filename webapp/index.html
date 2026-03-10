@@ -368,7 +368,7 @@
       if (regularCount < regularCapacity) {
         parts.push("часть слотов недоступна сегодня (лимит замен)");
       }
-      if (readyFoodItems.length) parts.push(`готовая еда (без дублей): ${readyFoodItems.length}`);
+      if (readyFoodItems.length) parts.push(`готовая еда: ${readyFoodItems.length}`);
       el.textContent = `${parts.join(", ")}.`;
     }
 
