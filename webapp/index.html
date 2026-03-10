@@ -341,7 +341,11 @@
       for (const tab of tabs) {
         const btn = document.createElement("button");
         btn.className = `tab${tab.id === activeTab ? " active" : ""}`;
-        btn.textContent = `${tab.title} (${tab.items.length})`;
+        if (tab.type === "group") {
+          btn.textContent = `${tab.title} (${tab.items.length}/6)`;
+        } else {
+          btn.textContent = `${tab.title} (${tab.items.length})`;
+        }
         btn.addEventListener("click", () => {
           activeTab = tab.id;
           renderTabs();
@@ -427,7 +431,7 @@
         if (!hasDataParam) {
           empty.innerHTML = "Здесь нет данных по товарам.<br/>Открой Mini App через команду /app в боте.";
         } else {
-          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Сначала запусти /collect в боте.";
+          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Обновление идет автоматически в 10:00 (Europe/Moscow).";
         }
         itemsEl.appendChild(empty);
         return;

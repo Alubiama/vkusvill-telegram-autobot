@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,11 @@ def _parse_price(token: str) -> float:
 
 def _item_id(name: str) -> str:
     return hashlib.sha1(name.strip().lower().encode("utf-8")).hexdigest()[:16]
+
+
+def _log(message: str) -> None:
+    # Keep stdout clean for JSON output consumed by the bot provider.
+    print(message, file=sys.stderr, flush=True)
 
 
 def _is_favorite_marker(text: str) -> bool:
@@ -210,6 +216,16 @@ def _open_discounts_area(page) -> None:
 
 def _click_refresh_discounts(page) -> bool:
     # Try to click any visible refresh control for personal "6 discounts".
+    page.evaluate("window.scrollTo(0, 0)")
+    before_fp = page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+          const nodes = Array.from(document.querySelectorAll('.js-product-cart, .lk-specials-col__lp-with-prod'));
+          return nodes.map((el) => norm(el.innerText)).filter(Boolean).join('||');
+        }
+        """
+    )
     clicked = page.evaluate(
         """
         () => {
@@ -219,10 +235,21 @@ def _click_refresh_discounts(page) -> bool:
             '.js-lk-inshop-change',
             '.js-lk-inshop-reroll',
             '.js-lk-specials-refresh',
+            '.js-inshop-update',
+            '.js-lk-modal-6sales-categories-show',
             '[data-testid*="refresh"]',
+            '[data-qa*="refresh"]',
             '[class*="inshop"][class*="refresh"]',
             '[class*="special"][class*="refresh"]',
             '[class*="lk"][class*="refresh"]',
+            '[class*="refresh"]',
+            '[class*="reload"]',
+            '[class*="replace"]',
+            '[title*="обнов"]',
+            '[title*="Обнов"]',
+            '[title*="замен"]',
+            '[aria-label*="обнов"]',
+            '[aria-label*="замен"]',
           ];
           for (const sel of directSelectors) {
             const nodes = Array.from(document.querySelectorAll(sel));
@@ -239,25 +266,44 @@ def _click_refresh_discounts(page) -> bool:
             'сменить 6 скидок',
             'поменять 6 скидок',
             'сменить подборку',
+            'заменить товары',
+            'заменить 6 товаров',
+            'обновить товары',
+            'изменить товары',
+            'изменить подборку',
             'обновить',
           ];
-          const nodes = Array.from(document.querySelectorAll('button, a, [role="button"], div, span'));
-          for (const el of nodes) {
-            const txt = norm(el.innerText);
-            if (!txt || el.offsetParent === null) continue;
-            if (phrases.some((p) => txt.includes(p))) {
-              el.click();
-              return true;
+          const pickFromNodes = () => {
+            const nodes = Array.from(document.querySelectorAll('button, a, [role="button"], div, span'));
+            for (const el of nodes) {
+              const txt = norm(el.innerText);
+              if (!txt || el.offsetParent === null) continue;
+              if (phrases.some((p) => txt.includes(p))) {
+                el.click();
+                return true;
+              }
             }
+            return false;
+          };
+          if (pickFromNodes()) return true;
+
+          const maxScroll = Math.max(
+            document.body ? document.body.scrollHeight : 0,
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+          );
+          const steps = [0, Math.floor(maxScroll * 0.25), Math.floor(maxScroll * 0.5), Math.floor(maxScroll * 0.8)];
+          for (const y of steps) {
+            window.scrollTo(0, y);
+            if (pickFromNodes()) return true;
           }
           return false;
         }
         """
     )
     if not clicked:
-        print("[collector] refresh button not found")
+        _log("[collector] refresh button not found")
         return False
-    print("[collector] refresh click sent")
+    _log("[collector] refresh click sent")
 
     page.wait_for_timeout(1600)
     # Some flows show a confirmation button.
@@ -278,7 +324,26 @@ def _click_refresh_discounts(page) -> bool:
         }
         """
     )
-    page.wait_for_timeout(2600)
+    deadline = time.time() + 25
+    changed = False
+    while time.time() < deadline:
+        page.wait_for_timeout(1200)
+        current_fp = page.evaluate(
+            """
+            () => {
+              const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+              const nodes = Array.from(document.querySelectorAll('.js-product-cart, .lk-specials-col__lp-with-prod'));
+              return nodes.map((el) => norm(el.innerText)).filter(Boolean).join('||');
+            }
+            """
+        )
+        if current_fp and current_fp != before_fp:
+            changed = True
+            break
+    if changed:
+        _log("[collector] refresh updated cards")
+    else:
+        _log("[collector] refresh did not change cards")
     return True
 
 
@@ -286,13 +351,13 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
     merged: dict[str, DiscountItem] = {}
     total_waves = max(1, waves)
     for wave_idx in range(total_waves):
-        print(f"[collector] wave {wave_idx + 1}/{total_waves}: collecting")
+        _log(f"[collector] wave {wave_idx + 1}/{total_waves}: collecting")
         _open_discounts_area(page)
         current = _collect_from_dom(page, source)
-        print(f"[collector] wave {wave_idx + 1}: found {len(current)} items")
+        _log(f"[collector] wave {wave_idx + 1}: found {len(current)} items")
         for item in current:
             merged.setdefault(item.item_id, item)
-        print(f"[collector] merged unique items: {len(merged)}")
+        _log(f"[collector] merged unique items: {len(merged)}")
         if wave_idx == total_waves - 1:
             break
         if not _click_refresh_discounts(page):
@@ -337,7 +402,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", choices=["storage_state", "system_chrome"], default="system_chrome")
     parser.add_argument("--state-file", default="data/vkusvill_storage_state.json")
     parser.add_argument("--chrome-user-data-dir", default="")
-    parser.add_argument("--chrome-profile-name", default="auto")
+    parser.add_argument("--chrome-profile-name", default="Default")
     parser.add_argument("--out-file", default="data/today_discounts.json")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--interactive-login", action="store_true")
@@ -430,8 +495,8 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
 
         if not _is_logged_in(page):
             if args.interactive_login:
-                print("VkusVill login required in automation browser.")
-                print("Sign in on the opened page. Waiting up to 10 minutes...")
+                _log("VkusVill login required in automation browser.")
+                _log("Sign in on the opened page. Waiting up to 10 minutes...")
                 deadline = time.time() + 600
                 while time.time() < deadline:
                     if _is_logged_in(page):

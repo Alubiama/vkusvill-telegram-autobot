@@ -121,7 +121,25 @@ class RPACommandProvider(BaseProvider):
             capture_output=True,
             text=True,
         )
-        payload = json.loads(proc.stdout)
+        stdout = (proc.stdout or "").strip()
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            # Fallback: tolerate accidental diagnostic lines and parse last JSON line.
+            payload = None
+            for line in reversed([ln.strip() for ln in stdout.splitlines() if ln.strip()]):
+                if line.startswith("[") or line.startswith("{"):
+                    try:
+                        payload = json.loads(line)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+            if payload is None:
+                stderr = (proc.stderr or "").strip()
+                raise ValueError(
+                    "RPA command output is not valid JSON. "
+                    f"stdout={stdout[:500]!r}; stderr={stderr[:500]!r}"
+                )
         items: list[DiscountItem] = []
         for item in payload:
             name = str(item["name"]).strip()

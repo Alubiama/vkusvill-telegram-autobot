@@ -11,7 +11,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--src-root", default=None, help="Source Chrome User Data root.")
     parser.add_argument(
         "--profile-name",
-        default="auto",
+        default="Default",
         help='Profile folder name (Default, Profile 1, ...). Use "auto" for last used profile.',
     )
     parser.add_argument("--dst-root", default="data/chrome-user-data", help="Destination user data root.")

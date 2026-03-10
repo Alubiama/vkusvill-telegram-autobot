@@ -343,7 +343,9 @@ class VkusvillGroupBot:
         day = self._today()
         items = self.store.list_items(day)
         if not items:
-            await query.edit_message_text("No discounts yet. Run /collect.")
+            await query.edit_message_text(
+                "No discounts yet. Automatic update is scheduled daily at 10:00 (Europe/Moscow)."
+            )
             return
 
         action = parts[1]
