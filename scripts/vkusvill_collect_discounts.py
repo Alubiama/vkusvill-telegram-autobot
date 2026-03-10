@@ -214,7 +214,39 @@ def _open_discounts_area(page) -> None:
             continue
 
 
-def _click_refresh_discounts(page) -> bool:
+def _refresh_api_status(page) -> tuple[str, str]:
+    """Return refresh API result status and optional message."""
+    try:
+        resp = page.wait_for_response(
+            lambda r: "inshop_load_shop_new.php" in r.url
+            and "command=updTovAbonement" in ((r.request.post_data or "")),
+            timeout=16_000,
+        )
+    except Exception:
+        return "unknown", ""
+
+    data = {}
+    try:
+        data = resp.json()
+    except Exception:
+        try:
+            data = json.loads(resp.text())
+        except Exception:
+            return "unknown", ""
+
+    ok = str(data.get("success", "")).upper() == "Y"
+    if ok:
+        return "success", ""
+
+    err = _normalize_ws(str(data.get("error_text", "")))
+    title = _normalize_ws(str(data.get("title", "")))
+    msg = err or title
+    if "до 2 раз в день" in msg.lower():
+        return "limit", msg
+    return "rejected", msg
+
+
+def _click_refresh_discounts(page) -> tuple[bool, bool]:
     # Try to click any visible refresh control for personal "6 discounts".
     page.evaluate("window.scrollTo(0, 0)")
     before_fp = page.evaluate(
@@ -302,7 +334,7 @@ def _click_refresh_discounts(page) -> bool:
     )
     if not clicked:
         _log("[collector] refresh button not found")
-        return False
+        return False, False
     _log("[collector] refresh click sent")
 
     page.wait_for_timeout(1600)
@@ -324,6 +356,14 @@ def _click_refresh_discounts(page) -> bool:
         }
         """
     )
+    api_status, api_msg = _refresh_api_status(page)
+    if api_status == "limit":
+        _log(f"[collector] refresh rejected by server: {api_msg}")
+        return False, True
+    if api_status == "rejected":
+        _log(f"[collector] refresh rejected by server: {api_msg or 'unknown reason'}")
+        return False, False
+
     deadline = time.time() + 25
     changed = False
     while time.time() < deadline:
@@ -344,7 +384,7 @@ def _click_refresh_discounts(page) -> bool:
         _log("[collector] refresh updated cards")
     else:
         _log("[collector] refresh did not change cards")
-    return changed
+    return changed, False
 
 
 def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
@@ -360,7 +400,10 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
         _log(f"[collector] merged unique items: {len(merged)}")
         if wave_idx == total_waves - 1:
             break
-        changed = _click_refresh_discounts(page)
+        changed, limit_reached = _click_refresh_discounts(page)
+        if limit_reached:
+            _save_debug(page, f"refresh_limit_reached_wave_{wave_idx + 1}")
+            break
         if not changed:
             # Fallback: reopen the section and try one more time.
             _log("[collector] refresh unchanged, retrying after reopen")
@@ -368,7 +411,10 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
                 _open_discounts_area(page)
             except Exception:
                 pass
-            changed = _click_refresh_discounts(page)
+            changed, limit_reached = _click_refresh_discounts(page)
+            if limit_reached:
+                _save_debug(page, f"refresh_limit_reached_wave_{wave_idx + 1}_retry")
+                break
         if not changed:
             _save_debug(page, f"refresh_not_changed_wave_{wave_idx + 1}")
             # Continue anyway to collect current state for transparency.
