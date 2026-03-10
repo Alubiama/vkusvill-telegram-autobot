@@ -17,6 +17,7 @@
       --accent: #2f8a57;
     }
     * { box-sizing: border-box; }
+    html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
     body {
       margin: 0;
       font-family: "Trebuchet MS", "Segoe UI", sans-serif;
@@ -29,7 +30,8 @@
       padding: 8px;
     }
     .shell {
-      max-width: 640px;
+      width: 100%;
+      max-width: 430px;
       margin: 0 auto;
       display: grid;
       gap: 8px;
@@ -99,16 +101,18 @@
       border-radius: 12px;
       padding: 8px;
       background: #fbfefb;
+      min-width: 0;
     }
     .name {
       font-size: 13px;
       font-weight: 700;
       line-height: 1.2;
       margin-bottom: 6px;
+      word-break: break-word;
     }
     .price-row {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 6px;
       margin-bottom: 6px;
     }
@@ -167,11 +171,33 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .action-btn:disabled {
+      opacity: 0.7;
+      cursor: default;
+    }
     .empty {
       text-align: center;
       color: var(--muted);
       padding: 20px 10px;
       line-height: 1.35;
+    }
+    .send-state {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      background: #f9fcf7;
+    }
+    .send-state.ok {
+      color: #1f5f3b;
+      border-color: #a7cfb7;
+      background: #edf8f0;
+    }
+    .send-state.err {
+      color: #7a2e2e;
+      border-color: #d9b3b3;
+      background: #fdf1f1;
     }
   </style>
 </head>
@@ -201,6 +227,7 @@
       <button class="action-btn primary" id="sendAllBtn">Отправить выбор</button>
       <button class="action-btn" id="closeBtn">Закрыть</button>
     </section>
+    <section class="send-state" id="sendState" style="display:none"></section>
   </div>
 
   <script>
@@ -245,6 +272,7 @@
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const day = payload.day || today;
+    const snapshotId = String(payload.snapshot_id || "");
     document.getElementById("day").textContent = day;
 
     const fallbackItems = Array.isArray(payload.items)
@@ -333,10 +361,23 @@
     function updateOverview() {
       const el = document.getElementById("overviewSub");
       if (!el) return;
-      const parts = ["3 подборки по 6"];
+      const regularCount = Number(payload.regular_count ?? groups.reduce((acc, g) => acc + g.items.length, 0));
+      const regularCapacity = Number(payload.regular_capacity ?? 18);
+      const parts = [`3 подборки по 6 (${regularCount}/${regularCapacity})`];
       if (favoriteItems.length) parts.push("любимый товар отдельно");
-      if (readyFoodItems.length) parts.push(`готовая еда: ${readyFoodItems.length}`);
+      if (regularCount < regularCapacity) {
+        parts.push("часть слотов недоступна сегодня (лимит замен)");
+      }
+      if (readyFoodItems.length) parts.push(`готовая еда (без дублей): ${readyFoodItems.length}`);
       el.textContent = `${parts.join(", ")}.`;
+    }
+
+    function setSendState(text, kind = "ok") {
+      const el = document.getElementById("sendState");
+      if (!el) return;
+      el.style.display = "block";
+      el.className = `send-state ${kind}`;
+      el.textContent = text;
     }
     const selected = {};
     for (const item of allRealItems) {
@@ -486,13 +527,27 @@
     }
 
     function sendAll() {
+      const btn = document.getElementById("sendAllBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Отправляем...";
+      }
       const qty = {};
       for (const item of allRealItems) {
         qty[item.item_id] = selected[item.item_id] ? 1 : 0;
       }
-      const payloadOut = { type: "all_choices", day, qty };
-      tg?.sendData(JSON.stringify(payloadOut));
-      tg?.close();
+      const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
+      try {
+        tg?.sendData(JSON.stringify(payloadOut));
+        setSendState("Выбор отправлен. Дождись сообщения от бота в чате.", "ok");
+      } catch (_err) {
+        setSendState("Не удалось отправить выбор. Открой /app и попробуй снова.", "err");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Отправить выбор";
+        }
+      }
     }
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);

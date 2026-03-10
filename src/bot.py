@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import shlex
@@ -35,6 +36,11 @@ class VkusvillGroupBot:
 
     def _today(self) -> str:
         return datetime.now(self.settings.timezone).strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _snapshot_id(items: list[object], day: str) -> str:
+        raw = "|".join(sorted(str(x.item_id) for x in items))
+        return hashlib.sha1(f"{day}|{raw}".encode("utf-8")).hexdigest()[:12]
 
     def _get_chat_id(self) -> int | None:
         if self.settings.chat_id is not None:
@@ -105,6 +111,8 @@ class VkusvillGroupBot:
                 your[item.item_id] = self.store.get_user_qty(day, user_id, item.item_id)
 
         groups, favorites, ready_food = self._mini_groups(items)
+        snapshot_id = self._snapshot_id(items, day)
+        regular_count = sum(len(g["items"]) for g in groups)
 
         def pack_item(item: object) -> dict:
             return {
@@ -117,6 +125,7 @@ class VkusvillGroupBot:
 
         payload = {
             "day": day,
+            "snapshot_id": snapshot_id,
             "groups": [
                 {
                     "id": g["id"],
@@ -130,6 +139,8 @@ class VkusvillGroupBot:
             "items": [pack_item(item) for item in items],
             "totals": totals,
             "your": your,
+            "regular_count": regular_count,
+            "regular_capacity": 18,
         }
 
         packed = base64.urlsafe_b64encode(
@@ -142,10 +153,13 @@ class VkusvillGroupBot:
                 json.dumps(
                     {
                         "day": day,
+                        "snapshot_id": payload["snapshot_id"],
                         "groups": payload["groups"],
                         "favorite": payload["favorite"],
                         "extra_ready_food": payload["extra_ready_food"],
                         "items": payload["items"],
+                        "regular_count": payload["regular_count"],
+                        "regular_capacity": payload["regular_capacity"],
                     },
                     ensure_ascii=False,
                     separators=(",", ":"),
@@ -318,6 +332,7 @@ class VkusvillGroupBot:
         user_name = update.effective_user.full_name
         items = self.store.list_items(day)
         items_by_id = {x.item_id: x for x in items}
+        snapshot_id = self._snapshot_id(items, day)
 
         ptype = payload.get("type")
         if ptype == "single_choice":
@@ -331,15 +346,40 @@ class VkusvillGroupBot:
             return
 
         if ptype == "all_choices":
+            payload_day = str(payload.get("day") or "")
+            payload_snapshot = str(payload.get("snapshot_id") or "")
+            if payload_day and payload_day != day:
+                await update.message.reply_text(
+                    f"Data is stale ({payload_day} vs {day}). Reopen Mini App via /app."
+                )
+                return
+            if payload_snapshot and payload_snapshot != snapshot_id:
+                await update.message.reply_text(
+                    "Data snapshot is outdated. Reopen Mini App via /app and submit again."
+                )
+                return
+
             qty_map = payload.get("qty") or {}
-            saved = 0
+            selected_positive = 0
+            touched = 0
             for item_id, raw_qty in qty_map.items():
                 if item_id not in items_by_id:
                     continue
                 qty = max(0, int(raw_qty))
                 self.store.set_vote(day, user_id, user_name, item_id, qty)
-                saved += 1
-            await update.message.reply_text(f"Saved choices for {saved} items.")
+                touched += 1
+                if qty > 0:
+                    selected_positive += 1
+
+            if touched == 0:
+                await update.message.reply_text(
+                    "Nothing saved: no matching items for today's snapshot. Reopen Mini App via /app."
+                )
+                return
+
+            await update.message.reply_text(
+                f"Saved: {selected_positive} selected items (updated {touched} entries)."
+            )
             return
 
         await update.message.reply_text("Unknown Mini App payload type.")
