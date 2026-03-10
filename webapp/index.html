@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
@@ -233,7 +233,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260310-6";
+    const BUILD_ID = "b-20260310-8";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -298,7 +298,7 @@
     const day = payload.day || payload.d || today;
     const snapshotId = String(payload.snapshot_id || payload.sid || "");
     document.getElementById("day").textContent = day;
-    document.getElementById("appMeta").textContent = `Vkusvill Mini App · ${BUILD_ID}`;
+    document.getElementById("appMeta").textContent = `Vkusvill Mini App - ${BUILD_ID}`;
 
     const fallbackItems = Array.isArray(payload.items)
       ? payload.items.map(unpackItem).filter(validItem)
@@ -359,7 +359,7 @@
         const gItems = ids.map(mapItem).filter(validItem);
         return {
           id: `g${idx + 1}`,
-          title: `РџРѕРґР±РѕСЂРєР° ${idx + 1}`,
+          title: `Подборка ${idx + 1}`,
           items: gItems.slice(0, 6),
           type: "group",
         };
@@ -585,18 +585,19 @@
       const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
       try {
         if (!tg || typeof tg.sendData !== "function") {
-          throw new Error("Telegram WebApp API недоступен");
-        }
-        if (!tg.initData || String(tg.initData).length < 8) {
-          throw new Error("Mini App открыт вне Telegram-контекста");
+          throw new Error("Telegram WebApp API unavailable");
         }
         tg.sendData(JSON.stringify(payloadOut));
+        setSendState("Выбор отправлен. В чате должно прийти подтверждение от бота (Saved: ...).", "ok");
+      } catch (err) {
+        const reason = (err && err.message) ? err.message : "unknown";
+        const hasTg = Boolean(tg);
+        const hasSendData = Boolean(tg && typeof tg.sendData === "function");
+        const initDataLen = (tg && tg.initData) ? String(tg.initData).length : 0;
         setSendState(
-          "Выбор отправлен. Если в чате нет ответа от бота (Saved: ...), открой Mini App заново через /app.",
-          "ok",
+          `Отправка не сработала (${reason}). hasTg=${hasTg}, hasSendData=${hasSendData}, initDataLen=${initDataLen}.`,
+          "err",
         );
-      } catch (_err) {
-        setSendState("Отправка не сработала. Открой Mini App через /app и повтори.", "err");
       } finally {
         if (btn) {
           btn.disabled = false;
@@ -615,3 +616,4 @@
   </script>
 </body>
 </html>
+
