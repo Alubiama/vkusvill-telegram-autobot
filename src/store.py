@@ -96,6 +96,50 @@ class StateStore:
                     fresh.append(item)
         return fresh
 
+    def sync_items(self, day: str, items: list[ItemRow]) -> tuple[list[ItemRow], int]:
+        existing_ids = {row.item_id for row in self.list_items(day)}
+        fresh: list[ItemRow] = []
+        seen_new: set[str] = set()
+        new_ids: list[str] = []
+
+        with self._connect() as conn:
+            for item in items:
+                if item.item_id in seen_new:
+                    continue
+                seen_new.add(item.item_id)
+                new_ids.append(item.item_id)
+                conn.execute(
+                    """
+                    INSERT INTO items(day, item_id, name, price, discount_price, source)
+                    VALUES(?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(day, item_id) DO UPDATE SET
+                      name=excluded.name,
+                      price=excluded.price,
+                      discount_price=excluded.discount_price,
+                      source=excluded.source
+                    """,
+                    (day, item.item_id, item.name, item.price, item.discount_price, item.source),
+                )
+                if item.item_id not in existing_ids:
+                    fresh.append(item)
+
+            if new_ids:
+                placeholders = ",".join("?" for _ in new_ids)
+                conn.execute(
+                    f"DELETE FROM items WHERE day = ? AND item_id NOT IN ({placeholders})",
+                    [day, *new_ids],
+                )
+                conn.execute(
+                    f"DELETE FROM votes WHERE day = ? AND item_id NOT IN ({placeholders})",
+                    [day, *new_ids],
+                )
+            else:
+                conn.execute("DELETE FROM votes WHERE day = ?", (day,))
+                conn.execute("DELETE FROM items WHERE day = ?", (day,))
+
+        removed = len(existing_ids - set(new_ids))
+        return fresh, removed
+
     def list_items(self, day: str) -> list[ItemRow]:
         with self._connect() as conn:
             rows = conn.execute(

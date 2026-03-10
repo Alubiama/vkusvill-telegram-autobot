@@ -241,11 +241,14 @@ class VkusvillGroupBot:
             LOGGER.exception("Collect failed")
             return
 
-        fresh = self.store.upsert_items(day, [x.to_row() for x in items])
+        fresh, removed = self.store.sync_items(day, [x.to_row() for x in items])
         all_items = self.store.list_items(day)
         await self._send(
             app,
-            f"Collection {now.strftime('%H:%M')} complete. Items in base: {len(all_items)}, new: {len(fresh)}.",
+            (
+                f"Collection {now.strftime('%H:%M')} complete. "
+                f"Items in base: {len(all_items)}, new: {len(fresh)}, removed: {removed}."
+            ),
             reply_markup=self._open_showcase_markup(),
         )
 
