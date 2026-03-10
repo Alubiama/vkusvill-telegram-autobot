@@ -13,5 +13,5 @@ if not exist "data\chrome-user-data\Default" (
   exit /b 1
 )
 
-".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "auto" --headless --waves 3 --out-file data\today_discounts.json
+".venv\Scripts\python.exe" scripts\vkusvill_collect_discounts.py --source system_chrome --chrome-user-data-dir "data/chrome-user-data" --chrome-profile-name "auto" --headless --interactive-login --waves 3 --out-file data\today_discounts.json
 exit /b %errorlevel%

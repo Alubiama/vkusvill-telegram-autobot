@@ -12,7 +12,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
-RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:в‚Ѕ|СЂСѓР±)", re.IGNORECASE)
+RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:₽|руб|в‚Ѕ|СЂСѓР±)", re.IGNORECASE)
 
 
 @dataclass
@@ -50,12 +50,12 @@ def _item_id(name: str) -> str:
 def _is_favorite_marker(text: str) -> bool:
     lowered = _normalize_ws(text).lower()
     markers = [
-        "РїРѕРґРѕР±СЂР°Р»Рё РґР»СЏ РІР°СЃ",
-        "РЅР°Р·РЅР°С‡РёС‚СЊ РЅРѕРІС‹Р№",
-        "Р»СЋР±РёРјС‹Р№ РїСЂРѕРґСѓРєС‚",
-        "Р»СЋР±РёРјС‹Р№ С‚РѕРІР°СЂ",
-        "СЂС—СЂС•СЂТ‘СЂС•СЂВ±СЃС’СЂВ°СЂВ»СЂС‘ СЂТ‘СЂВ»СЃСџ СЂС–СЂВ°СЃСЃ",
-        "СЂС•СЂВ°СЂВ·СЂС•СЂВ°СЃвЂЎСЂС‘СЃвЂљСЃСљ СЂС•СЂС•СЂС–СЃвЂ№СЂв„–",
+        "подобрали для вас",
+        "назначить новый",
+        "любимый продукт",
+        "любимый товар",
+        "рїрѕрґрѕр±сђр°р»рё рґр»сџ рір°сс",
+        "рѕр°р·рѕр°с‡рёс‚сњ рѕрѕріс‹р№",
     ]
     return any(marker in lowered for marker in markers)
 
@@ -277,14 +277,23 @@ def _collect_waves(page, source: str, waves: int) -> list[DiscountItem]:
 
 
 def _is_logged_in(page) -> bool:
-    text = page.inner_text("body")
-    lowered = text.lower()
-    # Strong login wall markers.
-    if "Р°РІС‚РѕСЂРёР·СѓР№С‚РµСЃСЊ РїРѕ" in lowered:
+    # Prefer structural markers over text to avoid encoding issues.
+    if page.locator("input[type='tel']").count() > 0:
         return False
-    if "РІРІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°" in lowered:
+    if page.locator("input[placeholder*='телефон']").count() > 0:
         return False
-    if "СЃ РєР°СЂС‚РѕР№ РІС‹РіРѕРґРЅРµРµ" in lowered and "РІРѕР№С‚Рё" in lowered:
+    if page.locator("text=Введите номер телефона").count() > 0:
+        return False
+
+    body = _normalize_ws(page.inner_text("body")).lower()
+    login_markers = [
+        "авторизуйтесь во вкусвилл",
+        "введите номер телефона",
+        "с картой выгоднее",
+        "р°рір‚рѕсђрёс—сѓр№с‚рµсѓсњ рірѕ",
+        "ріірірµріирёс‚ріµ рѕрѕрјрµсђ с‚рµр»рµс„рѕрѕр°",
+    ]
+    if any(marker in body for marker in login_markers):
         return False
     return True
 
@@ -358,26 +367,42 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
             profile_name = "Default"
 
     with sync_playwright() as p:
-        try:
-            context = p.chromium.launch_persistent_context(
-                channel="chrome",
-                user_data_dir=str(user_data_dir),
-                headless=args.headless,
-                locale="ru-RU",
-                timezone_id="Europe/Moscow",
-                args=[f"--profile-directory={profile_name}", "--disable-blink-features=AutomationControlled"],
-            )
-        except Exception as exc:
-            raise SystemExit(
-                "Failed to open Chrome profile. Close all Chrome windows and retry. "
-                f"Details: {exc}"
-            ) from exc
+        def open_context(headless_mode: bool):
+            try:
+                return p.chromium.launch_persistent_context(
+                    channel="chrome",
+                    user_data_dir=str(user_data_dir),
+                    headless=headless_mode,
+                    locale="ru-RU",
+                    timezone_id="Europe/Moscow",
+                    args=[
+                        f"--profile-directory={profile_name}",
+                        "--disable-blink-features=AutomationControlled",
+                    ],
+                )
+            except Exception as exc:
+                raise SystemExit(
+                    "Failed to open Chrome profile. Close all Chrome windows and retry. "
+                    f"Details: {exc}"
+                ) from exc
 
+        context = open_context(args.headless)
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
         page = context.new_page()
         _open_discounts_area(page)
+
+        if not _is_logged_in(page) and args.interactive_login and args.headless:
+            # Headless context cannot be used for SMS login; reopen headed once.
+            context.close()
+            context = open_context(False)
+            context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            )
+            page = context.new_page()
+            _open_discounts_area(page)
+
         if not _is_logged_in(page):
             if args.interactive_login:
                 print("VkusVill login required in automation browser.")
