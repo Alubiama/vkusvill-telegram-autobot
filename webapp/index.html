@@ -7,75 +7,86 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
   <style>
+    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap");
     :root {
-      --bg0: #f4f1e8;
-      --bg1: #fff7dc;
+      --bg0: #eff4ea;
+      --bg1: #f7efd6;
+      --bg2: #f1f6e7;
       --card: #ffffff;
-      --ink: #1f2f22;
-      --muted: #58705f;
-      --ok: #2e8b57;
-      --line: #d8dfd8;
-      --accent: #2f8a57;
+      --ink: #193428;
+      --muted: #4d6a5b;
+      --ok: #17824f;
+      --line: #ced9cb;
+      --line-soft: #dfebe0;
+      --accent: #1d8c55;
+      --accent-soft: #ecf7ef;
+      --danger: #9f3f3f;
+      --danger-soft: #fff2f1;
+      --shadow: 0 8px 28px rgba(23, 52, 37, 0.11);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
     body {
       margin: 0;
-      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-family: "Manrope", "Trebuchet MS", "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at 90% -10%, #ffe9a8 0%, transparent 46%),
-        radial-gradient(circle at -10% 120%, #cfe7d4 0%, transparent 44%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
+        radial-gradient(circle at 88% -10%, #f7e4a6 0%, transparent 48%),
+        radial-gradient(circle at -20% 110%, #cce8d0 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg0), var(--bg1) 56%, var(--bg2));
       color: var(--ink);
-      min-height: 100vh;
-      padding: 6px;
+      min-height: 100dvh;
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
     }
     .shell {
       width: 100%;
-      max-width: 356px;
+      max-width: 372px;
       margin: 0 auto;
       display: grid;
-      gap: 8px;
-      padding-bottom: 8px;
+      gap: 9px;
+      padding-bottom: 6px;
     }
     .card {
       background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 9px;
-      box-shadow: 0 8px 22px rgba(38, 55, 39, 0.07);
+      border: 1px solid var(--line-soft);
+      border-radius: 16px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+      animation: fade-up 180ms ease-out;
     }
     .top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
     }
-    .t1 { font-size: 11px; color: var(--muted); }
-    .t2 { font-size: 14px; font-weight: 700; }
+    .t1 { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.01em; }
+    .t2 { font-size: 28px; line-height: 1; font-weight: 800; margin-top: 2px; }
     .pill {
       border: 1px solid var(--line);
       border-radius: 999px;
-      padding: 6px 8px;
-      font-size: 11px;
-      background: #f9fcf7;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #f5faf2;
       white-space: nowrap;
+      color: #173224;
     }
     .section-title {
-      font-size: 13px;
-      font-weight: 700;
-      margin-bottom: 4px;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 3px;
+      line-height: 1.2;
     }
     .section-sub {
       color: var(--muted);
-      font-size: 11px;
-      margin-bottom: 6px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      line-height: 1.35;
     }
     .tabs {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
-      overflow-x: hidden;
+      gap: 6px;
       padding-bottom: 2px;
     }
     .tab {
@@ -83,60 +94,125 @@
       border-radius: 999px;
       background: #fff;
       color: var(--ink);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
-      padding: 6px 9px;
+      padding: 7px 10px;
       white-space: nowrap;
       cursor: pointer;
+      transition: transform 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+    }
+    .tab:hover {
+      transform: translateY(-1px);
+      border-color: #9bc3a8;
     }
     .tab.active {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
     }
-    .items {
-      display: grid;
+    .group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .group-tools {
+      display: flex;
       gap: 6px;
     }
-    .item {
+    .tool-btn {
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 8px;
-      background: #fbfefb;
-      min-width: 0;
-    }
-    .name {
+      background: #f9fdf8;
+      color: var(--muted);
+      border-radius: 9px;
       font-size: 11px;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1;
+      padding: 7px 9px;
+      cursor: pointer;
+      transition: all 130ms ease-out;
+    }
+    .tool-btn:hover {
+      border-color: #a3c6ad;
+      color: #244635;
+    }
+    .tool-btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .items {
+      display: grid;
+      gap: 8px;
+    }
+    .item {
+      border: 1px solid var(--line-soft);
+      border-radius: 14px;
+      padding: 9px;
+      background: #fdfefd;
+      min-width: 0;
+      transition: border-color 140ms ease-out, box-shadow 140ms ease-out, transform 140ms ease-out;
+      animation: fade-up 180ms ease-out;
+    }
+    .item.selected {
+      border-color: #8dc2a1;
+      box-shadow: 0 4px 14px rgba(32, 95, 61, 0.13);
+      transform: translateY(-1px);
+    }
+    .item-meta {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 4px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #b7dbc4;
+      background: #f2fbf4;
+      color: #206243;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 7px;
+    }
+    .name {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.25;
       margin-bottom: 6px;
       word-break: break-word;
     }
     .price-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      gap: 6px;
+      gap: 4px;
       margin-bottom: 6px;
     }
     .price-box {
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      padding: 6px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 7px 8px;
       background: #fff;
     }
-    .price-label { font-size: 11px; color: var(--muted); }
-    .price-val { font-size: 12px; font-weight: 700; }
+    .price-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+    .price-val { font-size: 22px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
     .discount { color: var(--ok); }
     .toggle {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 9px;
+      border-radius: 10px;
       background: #fff;
       color: var(--ink);
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 700;
-      padding: 8px 7px;
+      padding: 10px 8px;
       cursor: pointer;
+      min-height: 42px;
+      transition: all 140ms ease-out;
+    }
+    .toggle:hover {
+      border-color: #9bc7a9;
+      transform: translateY(-1px);
     }
     .toggle.active {
       background: var(--accent);
@@ -152,26 +228,32 @@
     .actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      gap: 8px;
       position: sticky;
       bottom: 0;
-      background: linear-gradient(180deg, rgba(255, 247, 220, 0), rgba(255, 247, 220, 0.95) 28%);
-      padding-top: 8px;
+      background: linear-gradient(180deg, rgba(245, 239, 214, 0), rgba(245, 239, 214, 0.95) 25%);
+      padding-top: 9px;
     }
     .action-btn {
       border: 1px solid var(--line);
-      border-radius: 9px;
+      border-radius: 10px;
       background: #fff;
       color: var(--ink);
-      font-size: 11px;
-      font-weight: 700;
-      padding: 8px 7px;
+      font-size: 14px;
+      font-weight: 800;
+      padding: 12px 9px;
       cursor: pointer;
+      min-height: 46px;
+      transition: transform 120ms ease-out, border-color 120ms ease-out;
     }
     .action-btn.primary {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
+    }
+    .action-btn:hover {
+      transform: translateY(-1px);
+      border-color: #95c3a5;
     }
     .action-btn:disabled {
       opacity: 0.7;
@@ -181,25 +263,54 @@
       text-align: center;
       color: var(--muted);
       padding: 20px 10px;
-      line-height: 1.35;
+      line-height: 1.42;
+      font-size: 13px;
     }
     .send-state {
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 8px;
-      font-size: 12px;
+      padding: 10px;
+      font-size: 13px;
       color: var(--muted);
-      background: #f9fcf7;
+      background: #f7fbf6;
+      line-height: 1.4;
     }
     .send-state.ok {
-      color: #1f5f3b;
-      border-color: #a7cfb7;
-      background: #edf8f0;
+      color: #1e6340;
+      border-color: #9eceb0;
+      background: #ebf8ef;
     }
     .send-state.err {
-      color: #7a2e2e;
-      border-color: #d9b3b3;
-      background: #fdf1f1;
+      color: var(--danger);
+      border-color: #e0b8b8;
+      background: var(--danger-soft);
+    }
+    button:focus-visible {
+      outline: 2px solid #1c8d56;
+      outline-offset: 2px;
+    }
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @media (max-width: 360px) {
+      .t2 { font-size: 24px; }
+      .name { font-size: 14px; }
+      .price-val { font-size: 20px; }
+      .action-btn { font-size: 13px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+        scroll-behavior: auto !important;
+      }
     }
   </style>
 </head>
@@ -220,8 +331,16 @@
     </section>
 
     <section class="card">
-      <div class="section-title" id="groupTitle">-</div>
-      <div class="section-sub" id="groupSub">-</div>
+      <div class="group-head">
+        <div>
+          <div class="section-title" id="groupTitle">-</div>
+          <div class="section-sub" id="groupSub">-</div>
+        </div>
+        <div class="group-tools" id="groupTools">
+          <button class="tool-btn" id="selectTabBtn" type="button">Выбрать всё</button>
+          <button class="tool-btn" id="clearTabBtn" type="button">Сброс</button>
+        </div>
+      </div>
       <div id="items" class="items"></div>
     </section>
 
@@ -229,11 +348,11 @@
       <button class="action-btn primary" id="sendAllBtn">Отправить выбор</button>
       <button class="action-btn" id="closeBtn">Закрыть</button>
     </section>
-    <section class="send-state" id="sendState" style="display:none"></section>
+    <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
   </div>
 
   <script>
-    const BUILD_ID = "b-20260310-9";
+    const BUILD_ID = "b-20260311-ux1";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -452,6 +571,22 @@
       document.getElementById("summary").textContent = `Выбрано: ${selectedCount()}`;
     }
 
+    function getActiveTab() {
+      return tabs.find((x) => x.id === activeTab) || tabs[0] || null;
+    }
+
+    function setTabSelection(mode) {
+      const tab = getActiveTab();
+      if (!tab || !Array.isArray(tab.items) || !tab.items.length) return;
+      const next = mode === "all" ? 1 : 0;
+      for (const item of tab.items) {
+        if (!item?.item_id) continue;
+        selected[item.item_id] = next;
+      }
+      renderGroup();
+      updateSummary();
+    }
+
     function toggleItem(itemId) {
       if (!itemId) return;
       selected[itemId] = selected[itemId] ? 0 : 1;
@@ -507,7 +642,21 @@
 
     function renderRealItem(itemsEl, item) {
       const wrap = document.createElement("article");
-      wrap.className = "item";
+      const isSelected = Boolean(selected[item.item_id]);
+      wrap.className = `item${isSelected ? " selected" : ""}`;
+
+      const src = String(item.source || "").toLowerCase();
+      const isFavorite = src.includes("favorite") || src.includes("fav") || String(item.item_id || "").startsWith("fav_");
+      const isReadyFood = src.startsWith("vkusvill_offers_ready_food");
+      if (isFavorite || isReadyFood) {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = isFavorite ? "Любимый" : "Готовая еда";
+        meta.appendChild(tag);
+        wrap.appendChild(meta);
+      }
 
       const name = document.createElement("div");
       name.className = "name";
@@ -526,8 +675,8 @@
       wrap.appendChild(prices);
 
       const t = document.createElement("button");
-      t.className = `toggle${selected[item.item_id] ? " active" : ""}`;
-      t.textContent = selected[item.item_id] ? "Выбрано" : "Выбрать";
+      t.className = `toggle${isSelected ? " active" : ""}`;
+      t.textContent = isSelected ? "Выбрано" : "Выбрать";
       t.addEventListener("click", () => toggleItem(item.item_id));
       wrap.appendChild(t);
       itemsEl.appendChild(wrap);
@@ -537,12 +686,16 @@
       const titleEl = document.getElementById("groupTitle");
       const subEl = document.getElementById("groupSub");
       const itemsEl = document.getElementById("items");
+      const toolsEl = document.getElementById("groupTools");
+      const selectBtn = document.getElementById("selectTabBtn");
+      const clearBtn = document.getElementById("clearTabBtn");
       itemsEl.innerHTML = "";
 
-      const tab = tabs.find((x) => x.id === activeTab) || tabs[0];
+      const tab = getActiveTab();
       if (!tab) {
         titleEl.textContent = "Нет товаров";
         subEl.textContent = "";
+        if (toolsEl) toolsEl.style.display = "none";
         const empty = document.createElement("div");
         empty.className = "empty";
         if (!hasDataParam) {
@@ -559,6 +712,17 @@
         subEl.textContent = `${tab.items.length}/6 товаров`;
       } else {
         subEl.textContent = `${tab.items.length} товаров`;
+      }
+
+      if (toolsEl) {
+        toolsEl.style.display = tab.items.length ? "flex" : "none";
+      }
+      if (selectBtn) {
+        selectBtn.disabled = !tab.items.length;
+        selectBtn.textContent = tab.type === "group" ? "Выбрать 6" : "Выбрать всё";
+      }
+      if (clearBtn) {
+        clearBtn.disabled = !tab.items.length;
       }
 
       for (const item of tab.items) {
@@ -608,6 +772,8 @@
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);
     document.getElementById("closeBtn").addEventListener("click", () => tg?.close());
+    document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
+    document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
 
     updateSummary();
     updateOverview();

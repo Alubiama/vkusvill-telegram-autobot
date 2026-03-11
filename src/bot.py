@@ -12,8 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
-from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update, WebAppInfo
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -215,20 +214,20 @@ class VkusvillGroupBot:
         return count
 
     def _open_showcase_markup(self, user_id: int | None = None) -> InlineKeyboardMarkup:
+        # Group-safe markup only. Telegram rejects web_app buttons in groups.
         rows: list[list[InlineKeyboardButton]] = [
             [InlineKeyboardButton("Open Showcase", callback_data="b|o|0")]
         ]
-        if self.settings.mini_app_url:
-            web_url = self._build_mini_app_url(user_id) or self.settings.mini_app_url
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        "Open App Window",
-                        web_app=WebAppInfo(url=web_url),
-                    )
-                ]
-            )
         return InlineKeyboardMarkup(rows)
+
+    @staticmethod
+    def _private_app_deeplink(bot_username: str | None) -> str | None:
+        if not bot_username:
+            return None
+        username = bot_username.strip().lstrip("@")
+        if not username:
+            return None
+        return f"https://t.me/{username}?start=open_app"
 
     def _browser_keyboard(self, item_id: str, idx: int, total: int) -> InlineKeyboardMarkup:
         prev_idx = (idx - 1) % total
@@ -433,36 +432,78 @@ class VkusvillGroupBot:
                 text=text,
                 reply_markup=self._browser_keyboard(item.item_id, 0, len(items)),
             )
-
     async def app(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or update.effective_user is None:
             return
         if not self.settings.mini_app_url:
-            await update.message.reply_text(
-                "MINI_APP_URL не задан. Добавь его в .env."
-            )
+            await update.message.reply_text("MINI_APP_URL is not set in .env.")
             return
+
+        chat_type = update.effective_chat.type if update.effective_chat else ""
+        if chat_type != "private":
+            deep_link = self._private_app_deeplink(getattr(context.bot, "username", None))
+            if deep_link:
+                await update.message.reply_text(
+                    "Mini App cannot be opened directly in group. Open it in DM:",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("Open Mini App", url=deep_link)]]
+                    ),
+                )
+            else:
+                await update.message.reply_text("Open bot in private chat and run /app.")
+            return
+
         web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
-        kb = ReplyKeyboardMarkup(
-            [
-                [KeyboardButton("Открыть скидки", web_app=WebAppInfo(url=web_url))],
-                [KeyboardButton(self.COLLECT_NOW_BUTTON)],
-            ],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
+        rows: list[list[InlineKeyboardButton]] = [
+            [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=web_url))]
+        ]
+        if self._user_is_owner(update.effective_user.id):
+            rows.append([InlineKeyboardButton("Finalize Now", callback_data="ctl|collectnow")])
         await update.message.reply_text(
             (
-                "Открой Mini App кнопкой ниже.\n"
-                "Важно: выбор надежно отправляется в бота именно через эту кнопку."
+                "Open Mini App using the button below.\n"
+                "Send your choices inside Mini App."
             ),
-            reply_markup=kb,
+            reply_markup=InlineKeyboardMarkup(rows),
         )
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        args = context.args or []
+        if args and args[0].strip().lower() in {"open_app", "app", "miniapp"}:
+            await self.app(update, context)
+            return
+        await update.message.reply_text("Open Mini App with /app")
 
     async def hidekbd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
             return
         await update.message.reply_text("Клавиатура скрыта.", reply_markup=ReplyKeyboardRemove())
+
+
+    async def on_control(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None or query.from_user is None:
+            return
+        parts = query.data.split("|")
+        if len(parts) < 2:
+            await query.answer()
+            return
+
+        action = parts[1]
+        if action != "collectnow":
+            await query.answer()
+            return
+
+        if not self._user_is_owner(query.from_user.id):
+            await query.answer("Only owner can finalize.", show_alert=True)
+            return
+
+        await query.answer("Finalizing...")
+        await self._finalize_impl(context.application)
+        if query.message is not None:
+            await query.message.reply_text("Итог собран сейчас.")
 
     async def on_text_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -880,6 +921,7 @@ class VkusvillGroupBot:
     def build_app(self) -> Application:
         app = Application.builder().token(self.settings.bot_token).build()
 
+        app.add_handler(CommandHandler("start", self.start))
         app.add_handler(CommandHandler("bind", self.bind))
         app.add_handler(CommandHandler("collect", self.collect))
         app.add_handler(CommandHandler("setowner", self.setowner))
@@ -896,6 +938,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("resetday", self.resetday))
         app.add_handler(CommandHandler("help", self.help))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_button))
+        app.add_handler(CallbackQueryHandler(self.on_control, pattern=r"^ctl\|"))
         app.add_handler(CallbackQueryHandler(self.on_browser, pattern=r"^b\|"))
         app.add_handler(CallbackQueryHandler(self.on_vote_legacy, pattern=r"^v\|"))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.on_webapp_data))
