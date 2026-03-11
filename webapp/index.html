@@ -148,7 +148,7 @@
     .item {
       border: 1px solid var(--line-soft);
       border-radius: 14px;
-      padding: 9px;
+      padding: 8px;
       background: #fdfefd;
       min-width: 0;
       transition: border-color 140ms ease-out, box-shadow 140ms ease-out, transform 140ms ease-out;
@@ -162,7 +162,40 @@
     .item-meta {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
+    }
+    .item-head {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      margin-bottom: 6px;
+    }
+    .thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--line-soft);
+      background: #f4f8f3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-ph {
+      font-size: 20px;
+      line-height: 1;
+      opacity: 0.8;
+    }
+    .item-main {
+      min-width: 0;
     }
     .tag {
       display: inline-flex;
@@ -171,31 +204,36 @@
       border: 1px solid #b7dbc4;
       background: #f2fbf4;
       color: #206243;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      padding: 4px 7px;
+      padding: 3px 7px;
     }
     .name {
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 800;
-      line-height: 1.25;
-      margin-bottom: 6px;
-      word-break: break-word;
+      line-height: 1.22;
+      margin-bottom: 5px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
     .price-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 4px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
       margin-bottom: 6px;
     }
     .price-box {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
-      padding: 7px 8px;
+      padding: 6px 8px;
       background: #fff;
+      min-width: 0;
+      flex: 1;
     }
-    .price-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
-    .price-val { font-size: 22px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
+    .price-label { font-size: 10px; color: var(--muted); margin-bottom: 1px; }
+    .price-val { font-size: 17px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
     .discount { color: var(--ok); }
     .toggle {
       width: 100%;
@@ -203,11 +241,11 @@
       border-radius: 10px;
       background: #fff;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      padding: 10px 8px;
+      padding: 9px 8px;
       cursor: pointer;
-      min-height: 42px;
+      min-height: 38px;
       transition: all 140ms ease-out;
     }
     .toggle:hover {
@@ -352,7 +390,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260311-ux1";
+    const BUILD_ID = "b-20260311-ui2";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -397,6 +435,7 @@
         price: Number(x?.p ?? x?.price ?? 0),
         discount_price: Number(x?.d ?? x?.discount_price ?? 0),
         source: String(x?.s || x?.source || ""),
+        image_url: String(x?.u || x?.image_url || ""),
       };
     }
 
@@ -471,6 +510,7 @@
           price: 0,
           discount_price: Number(row[2] || 0),
           source: "",
+          image_url: String(row[3] || ""),
         };
       };
       groups = [0, 1, 2].map((idx) => {
@@ -560,7 +600,10 @@
     let activeTab = tabs.length ? tabs[0].id : "g1";
 
     function rub(value) {
-      return `${Number(value).toFixed(2)} RUB`;
+      const n = Number(value || 0);
+      if (!Number.isFinite(n)) return "--";
+      const text = Number.isInteger(n) ? String(n) : n.toFixed(2);
+      return `${text} ₽`;
     }
 
     function selectedCount() {
@@ -653,30 +696,54 @@
         meta.className = "item-meta";
         const tag = document.createElement("span");
         tag.className = "tag";
-        tag.textContent = isFavorite ? "Любимый" : "Готовая еда";
+        tag.textContent = isFavorite ? "❤️ Любимый" : "🍱 Готовая еда";
         meta.appendChild(tag);
         wrap.appendChild(meta);
       }
 
+      const head = document.createElement("div");
+      head.className = "item-head";
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+      const imageUrl = String(item.image_url || "").trim();
+      if (imageUrl) {
+        const img = document.createElement("img");
+        img.src = imageUrl;
+        img.alt = item.name;
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.onerror = () => {
+          thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+        };
+        thumb.appendChild(img);
+      } else {
+        thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+      }
+      head.appendChild(thumb);
+
+      const main = document.createElement("div");
+      main.className = "item-main";
       const name = document.createElement("div");
       name.className = "name";
       name.textContent = item.name;
-      wrap.appendChild(name);
+      main.appendChild(name);
 
       const prices = document.createElement("div");
       prices.className = "price-row";
       const currentPrice = Number(item.discount_price || item.price || 0);
       prices.innerHTML = `
         <div class="price-box">
-          <div class="price-label">Цена</div>
+          <div class="price-label">💸 Цена</div>
           <div class="price-val discount">${rub(currentPrice)}</div>
         </div>
       `;
-      wrap.appendChild(prices);
+      main.appendChild(prices);
+      head.appendChild(main);
+      wrap.appendChild(head);
 
       const t = document.createElement("button");
       t.className = `toggle${isSelected ? " active" : ""}`;
-      t.textContent = isSelected ? "Выбрано" : "Выбрать";
+      t.textContent = isSelected ? "✅ Выбрано" : "Выбрать";
       t.addEventListener("click", () => toggleItem(item.item_id));
       wrap.appendChild(t);
       itemsEl.appendChild(wrap);

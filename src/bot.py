@@ -4,7 +4,6 @@ import base64
 import hashlib
 import json
 import logging
-import shlex
 import subprocess
 import sys
 import zlib
@@ -12,7 +11,15 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update, WebAppInfo
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+    WebAppInfo,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -179,7 +186,12 @@ class VkusvillGroupBot:
             "d": day,
             "sid": snapshot_id,
             "m": [
-                [str(item.item_id), str(item.name), float(item.discount_price)]
+                [
+                    str(item.item_id),
+                    str(item.name),
+                    float(item.discount_price),
+                    str(getattr(item, "image_url", "") or ""),
+                ]
                 for item in unique_items
             ],
             "g": group_indexes,
@@ -189,19 +201,33 @@ class VkusvillGroupBot:
             "cap": 18,
         }
 
-        raw_payload = json.dumps(
-            compact_payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        packed = base64.urlsafe_b64encode(zlib.compress(raw_payload, level=9)).decode("ascii").rstrip("=")
+        def _pack(payload: dict) -> str:
+            raw_payload = json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            return base64.urlsafe_b64encode(zlib.compress(raw_payload, level=9)).decode("ascii").rstrip("=")
+
+        packed = _pack(compact_payload)
 
         parts = urlsplit(self.settings.mini_app_url)
         query = dict(parse_qsl(parts.query, keep_blank_values=True))
         query["data"] = packed
         query["enc"] = "z"
         query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+        out_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+        # Safety fallback: if URL gets too long, drop image URLs and keep text mode stable.
+        if len(out_url) > 7000:
+            compact_payload["m"] = [
+                [str(item.item_id), str(item.name), float(item.discount_price)]
+                for item in unique_items
+            ]
+            query["data"] = _pack(compact_payload)
+            out_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+        return out_url
 
     def _regular_inshop_count(self, items: list[object]) -> int:
         count = 0
@@ -436,7 +462,7 @@ class VkusvillGroupBot:
         if update.message is None or update.effective_user is None:
             return
         if not self.settings.mini_app_url:
-            await update.message.reply_text("MINI_APP_URL is not set in .env.")
+            await update.message.reply_text("MINI_APP_URL не задан в .env.")
             return
 
         chat_type = update.effective_chat.type if update.effective_chat else ""
@@ -444,27 +470,33 @@ class VkusvillGroupBot:
             deep_link = self._private_app_deeplink(getattr(context.bot, "username", None))
             if deep_link:
                 await update.message.reply_text(
-                    "Mini App cannot be opened directly in group. Open it in DM:",
+                    "В группе Mini App напрямую не открывается. Открой в личке с ботом:",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("Open Mini App", url=deep_link)]]
+                        [[InlineKeyboardButton("Открыть Mini App", url=deep_link)]]
                     ),
                 )
             else:
-                await update.message.reply_text("Open bot in private chat and run /app.")
+                await update.message.reply_text("Открой бота в личке и выполни /app.")
             return
 
         web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
-        rows: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=web_url))]
+        keyboard_rows: list[list[KeyboardButton]] = [
+            [KeyboardButton("Запустить выбор в Mini App", web_app=WebAppInfo(url=web_url))]
         ]
         if self._user_is_owner(update.effective_user.id):
-            rows.append([InlineKeyboardButton("Finalize Now", callback_data="ctl|collectnow")])
+            keyboard_rows.append([KeyboardButton(self.COLLECT_NOW_BUTTON)])
+        kb = ReplyKeyboardMarkup(
+            keyboard_rows,
+            resize_keyboard=True,
+            one_time_keyboard=True,
+            input_field_placeholder="Нажми кнопку для открытия Mini App",
+        )
         await update.message.reply_text(
             (
-                "Open Mini App using the button below.\n"
-                "Send your choices inside Mini App."
+                "Нажми кнопку внизу для открытия Mini App.\n"
+                "Важно: отправка выбора работает именно из этого окна."
             ),
-            reply_markup=InlineKeyboardMarkup(rows),
+            reply_markup=kb,
         )
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -882,10 +914,11 @@ class VkusvillGroupBot:
         cmd = self.settings.order_executor_command.replace("{order_file}", str(out_path))
         try:
             proc = subprocess.run(
-                shlex.split(cmd),
+                cmd,
                 check=True,
                 capture_output=True,
                 text=True,
+                shell=True,
             )
             output = (proc.stdout or "").strip()
             if output:

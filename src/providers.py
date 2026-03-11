@@ -19,6 +19,7 @@ class DiscountItem:
     price: float
     discount_price: float
     source: str = "unknown"
+    image_url: str = ""
 
     def to_row(self) -> ItemRow:
         return ItemRow(
@@ -27,6 +28,7 @@ class DiscountItem:
             price=self.price,
             discount_price=self.discount_price,
             source=self.source,
+            image_url=self.image_url,
         )
 
 
@@ -57,6 +59,7 @@ class ManualJsonProvider(BaseProvider):
                     price=float(item.get("price", 0)),
                     discount_price=float(item.get("discount_price", item.get("price", 0))),
                     source=str(item.get("source", "manual_json")),
+                    image_url=str(item.get("image_url", "") or ""),
                 )
             )
         return items
@@ -104,6 +107,7 @@ class MockProvider(BaseProvider):
                     price=float(price),
                     discount_price=disc,
                     source="mock",
+                    image_url="",
                 )
             )
         return items
@@ -151,6 +155,7 @@ class RPACommandProvider(BaseProvider):
                     price=float(item.get("price", 0)),
                     discount_price=float(item.get("discount_price", item.get("price", 0))),
                     source=str(item.get("source", "rpa")),
+                    image_url=str(item.get("image_url", "") or ""),
                 )
             )
         return items

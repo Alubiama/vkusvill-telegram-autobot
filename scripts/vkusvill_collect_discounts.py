@@ -23,6 +23,7 @@ class DiscountItem:
     price: float
     discount_price: float
     source: str
+    image_url: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -31,6 +32,7 @@ class DiscountItem:
             "price": self.price,
             "discount_price": self.discount_price,
             "source": self.source,
+            "image_url": self.image_url,
         }
 
 
@@ -46,6 +48,17 @@ def _parse_price(token: str) -> float:
 
 def _item_id(name: str) -> str:
     return hashlib.sha1(name.strip().lower().encode("utf-8")).hexdigest()[:16]
+
+
+def _normalize_image_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("//"):
+        return f"https:{raw}"
+    if raw.startswith("/"):
+        return f"https://vkusvill.ru{raw}"
+    return raw
 
 
 def _log(message: str) -> None:
@@ -175,6 +188,11 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
               el.querySelector('.lk-specials-col__lp-with-prod--price-old')?.innerText ||
               ''
             ).trim(),
+            image: (
+              el.querySelector('img')?.getAttribute('src') ||
+              el.querySelector('img')?.getAttribute('data-src') ||
+              ''
+            ).trim(),
           }));
         }
         """
@@ -245,6 +263,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                 price=regular,
                 discount_price=discount,
                 source=f"{source}_favorite" if is_favorite else source,
+                image_url=_normalize_image_url(str(card.get("image") or "")),
             )
         )
 
@@ -268,6 +287,11 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
             name: norm((el.querySelector('.js-datalayer-catalog-list-name') || {}).innerText || ''),
             newPrice: norm((el.querySelector('.js-datalayer-catalog-list-price') || {}).innerText || ''),
             oldPrice: norm((el.querySelector('.js-datalayer-catalog-list-price-old') || {}).innerText || ''),
+            image: norm(
+              (el.querySelector('img') || {}).getAttribute?.('src') ||
+              (el.querySelector('img') || {}).getAttribute?.('data-src') ||
+              ''
+            ),
           }));
         }
         """
@@ -316,6 +340,7 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
                 price=regular,
                 discount_price=discount,
                 source=source,
+                image_url=_normalize_image_url(str(card.get("image") or "")),
             )
         )
 
@@ -338,6 +363,11 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
             ),
             newPrice: norm((el.querySelector('.lk-specials-col__lp-with-prod--price-new') || {}).innerText || ''),
             oldPrice: norm((el.querySelector('.lk-specials-col__lp-with-prod--price-old') || {}).innerText || ''),
+            image: norm(
+              (el.querySelector('img') || {}).getAttribute?.('src') ||
+              (el.querySelector('img') || {}).getAttribute?.('data-src') ||
+              ''
+            ),
           }));
         }
         """
@@ -383,6 +413,7 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
                 price=regular,
                 discount_price=discount,
                 source=f"{source}_favorite",
+                image_url=_normalize_image_url(str(card.get("image") or "")),
             )
         )
         break
@@ -474,7 +505,12 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
             const name = norm((el.querySelector('.js-datalayer-catalog-list-name') || {}).innerText || '');
             const priceNew = norm((el.querySelector('.js-datalayer-catalog-list-price') || {}).innerText || '');
             const priceOld = norm((el.querySelector('.js-datalayer-catalog-list-price-old') || {}).innerText || '');
-            rows.push({ xmlid, name, priceNew, priceOld, text: norm(el.innerText || '') });
+            const image = norm(
+              (el.querySelector('img') || {}).getAttribute?.('src') ||
+              (el.querySelector('img') || {}).getAttribute?.('data-src') ||
+              ''
+            );
+            rows.push({ xmlid, name, priceNew, priceOld, image, text: norm(el.innerText || '') });
           }
           return rows;
         }
@@ -519,6 +555,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
                 price=regular,
                 discount_price=discount,
                 source="vkusvill_offers_ready_food",
+                image_url=_normalize_image_url(str(row.get("image") or "")),
             )
         )
         if max_items > 0 and len(items) >= max_items:
