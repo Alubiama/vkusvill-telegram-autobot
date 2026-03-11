@@ -182,6 +182,17 @@ class VkusvillGroupBot:
         favorite_indexes = [register(item) for item in favorites[:1]]
         ready_food_indexes = [register(item) for item in ready_food]
 
+        def _compact_image_url(url: str) -> str:
+            raw = (url or "").strip()
+            if not raw:
+                return ""
+            # Remove unstable cache query and shorten common host prefix.
+            base = raw.split("?", 1)[0]
+            prefix = "https://img.vkusvill.ru/pim/images/"
+            if base.startswith(prefix):
+                return f"vv:{base[len(prefix):]}"
+            return base
+
         compact_payload = {
             "d": day,
             "sid": snapshot_id,
@@ -190,7 +201,7 @@ class VkusvillGroupBot:
                     str(item.item_id),
                     str(item.name),
                     float(item.discount_price),
-                    str(getattr(item, "image_url", "") or ""),
+                    _compact_image_url(str(getattr(item, "image_url", "") or "")),
                 ]
                 for item in unique_items
             ],

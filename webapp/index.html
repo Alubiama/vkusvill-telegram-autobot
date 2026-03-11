@@ -439,6 +439,15 @@
       };
     }
 
+    function expandImageUrl(raw) {
+      const s = String(raw || "").trim();
+      if (!s) return "";
+      if (s.startsWith("vv:")) {
+        return `https://img.vkusvill.ru/pim/images/${s.slice(3)}`;
+      }
+      return s;
+    }
+
     function validItem(x) {
       return Boolean(x.item_id && x.name);
     }
@@ -510,7 +519,7 @@
           price: 0,
           discount_price: Number(row[2] || 0),
           source: "",
-          image_url: String(row[3] || ""),
+          image_url: expandImageUrl(row[3]),
         };
       };
       groups = [0, 1, 2].map((idx) => {
