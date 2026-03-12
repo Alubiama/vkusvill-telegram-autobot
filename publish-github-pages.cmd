@@ -78,7 +78,7 @@ echo Repo ready. GitHub Pages URL (after workflow completes):
 echo %PAGE_URL%
 echo.
 echo Next:
-echo 1) Wait 1-2 minutes for Actions -> Pages deploy.
+echo 1) Wait 1-2 minutes for Actions to complete Pages deploy.
 echo 2) Put this URL into .env as MINI_APP_URL.
 echo 3) Restart bot and run /app in Telegram.
 
