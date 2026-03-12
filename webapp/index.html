@@ -473,7 +473,9 @@
         if (mirrorPath.startsWith("http://") || mirrorPath.startsWith("https://")) {
           if (!out.includes(mirrorPath)) out.push(mirrorPath);
         } else {
-          const rel = mirrorPath.startsWith("/") ? mirrorPath : `/${mirrorPath}`;
+          const rel = mirrorPath.startsWith("./")
+            ? mirrorPath
+            : `./${mirrorPath.replace(/^\/+/, "")}`;
           if (!out.includes(rel)) out.push(rel);
         }
       }
