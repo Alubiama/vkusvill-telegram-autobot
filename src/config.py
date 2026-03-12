@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
@@ -32,6 +33,33 @@ def _parse_collection_times(value: str | None) -> list[time]:
     return times
 
 
+def _parse_positive_int(value: str | None, default: int) -> int:
+    if value is None or not value.strip():
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _load_bot_token() -> str:
+    direct = (os.getenv("BOT_TOKEN") or "").strip()
+    if direct:
+        return direct
+
+    token_file = (os.getenv("BOT_TOKEN_FILE") or "").strip()
+    if token_file:
+        path = Path(token_file).expanduser()
+        if path.exists():
+            value = path.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+        raise ValueError(f"BOT_TOKEN_FILE does not exist or is empty: {path}")
+
+    raise ValueError("BOT_TOKEN is required (or set BOT_TOKEN_FILE)")
+
+
 @dataclass(frozen=True)
 class Settings:
     bot_token: str
@@ -48,12 +76,11 @@ class Settings:
     dry_run: bool
     db_path: str
     out_dir: str
+    out_retention_days: int
 
 
 def load_settings() -> Settings:
-    bot_token = os.getenv("BOT_TOKEN", "").strip()
-    if not bot_token:
-        raise ValueError("BOT_TOKEN is required")
+    bot_token = _load_bot_token()
 
     return Settings(
         bot_token=bot_token,
@@ -70,4 +97,5 @@ def load_settings() -> Settings:
         dry_run=_parse_bool(os.getenv("DRY_RUN"), True),
         db_path=os.getenv("DB_PATH", "data/state.db"),
         out_dir=os.getenv("OUT_DIR", "out"),
+        out_retention_days=_parse_positive_int(os.getenv("OUT_RETENTION_DAYS"), 30),
     )

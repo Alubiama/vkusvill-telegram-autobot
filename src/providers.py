@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .command_utils import command_to_args, project_root
 from .config import Settings
 from .store import ItemRow
 
@@ -118,12 +119,17 @@ class RPACommandProvider(BaseProvider):
         self.command = command
 
     def fetch(self, now: datetime) -> list[DiscountItem]:
+        args = command_to_args(self.command)
+        if not args:
+            raise ValueError("RPA_COMMAND is empty after expansion")
         proc = subprocess.run(
-            self.command,
-            shell=True,
+            args,
+            shell=False,
             check=True,
             capture_output=True,
             text=True,
+            cwd=str(project_root()),
+            timeout=420,
         )
         stdout = (proc.stdout or "").strip()
         try:

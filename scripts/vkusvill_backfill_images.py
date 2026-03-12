@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import sqlite3
@@ -91,8 +91,11 @@ def main() -> None:
         """
         SELECT item_id, name
         FROM items
-        WHERE day = ? AND COALESCE(image_url, '') = ''
-        ORDER BY rowid
+        WHERE day = ?
+          AND (
+            COALESCE(image_url, '') = ''
+            OR LOWER(COALESCE(image_url, '')) LIKE '%no-image.svg%'
+          )
         """,
         (day,),
     ).fetchall()

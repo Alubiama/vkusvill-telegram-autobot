@@ -442,10 +442,53 @@
     function expandImageUrl(raw) {
       const s = String(raw || "").trim();
       if (!s) return "";
+      if (s.startsWith("vi:")) {
+        const parts = s.split(":");
+        const variant = parts[1] || "0";
+        const uuid = (parts[2] || "").toLowerCase();
+        const looksUuid = /^[0-9a-f-]{36}$/.test(uuid);
+        if (looksUuid) {
+          const dir = variant === "1" ? "site/site_MiniWebP" : "site_MiniWebP";
+          return `https://img.vkusvill.ru/pim/images/${dir}/${uuid}.webp`;
+        }
+      }
       if (s.startsWith("vv:")) {
         return `https://img.vkusvill.ru/pim/images/${s.slice(3)}`;
       }
+      if (s.startsWith("//")) {
+        return `https:${s}`;
+      }
+      if (s.startsWith("/")) {
+        return `https://vkusvill.ru${s}`;
+      }
       return s;
+    }
+
+    function buildImageCandidates(raw) {
+      const first = expandImageUrl(raw);
+      if (!first) return [];
+      const out = [first];
+      const base = first.split("?")[0];
+      const hasWebp = /\.webp$/i.test(base);
+      const push = (value) => {
+        if (!value) return;
+        if (!out.includes(value)) out.push(value);
+      };
+      if (base.includes("/site/site_MiniWebP/")) {
+        push(base.replace("/site/site_MiniWebP/", "/site_MiniWebP/"));
+      }
+      if (base.includes("/site_MiniWebP/")) {
+        push(base.replace("/site_MiniWebP/", "/site/site_MiniWebP/"));
+      }
+      if (hasWebp) {
+        push(base.replace(/\.webp$/i, ".jpg"));
+        push(base.replace(/\.webp$/i, ".jpeg"));
+        if (base.includes("MiniWebP")) {
+          push(base.replace("MiniWebP", "MiniJPG").replace(/\.webp$/i, ".jpg"));
+          push(base.replace("MiniWebP", "MiniJPEG").replace(/\.webp$/i, ".jpeg"));
+        }
+      }
+      return out;
     }
 
     function validItem(x) {
@@ -716,15 +759,24 @@
       thumb.className = "thumb";
       const imageUrl = String(item.image_url || "").trim();
       if (imageUrl) {
+        const candidates = buildImageCandidates(imageUrl);
         const img = document.createElement("img");
-        img.src = imageUrl;
         img.alt = item.name;
         img.loading = "lazy";
-        img.referrerPolicy = "no-referrer";
+        let idx = 0;
+        const loadNext = () => {
+          if (idx >= candidates.length) {
+            thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+            return;
+          }
+          img.src = candidates[idx];
+          idx += 1;
+        };
         img.onerror = () => {
-          thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+          loadNext();
         };
         thumb.appendChild(img);
+        loadNext();
       } else {
         thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
       }

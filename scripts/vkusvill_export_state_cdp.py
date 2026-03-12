@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -80,7 +80,12 @@ def main() -> None:
         profile_name = _detect_last_profile(user_data_dir)
 
     # Ensure profile lock is free.
-    subprocess.run("taskkill /F /IM chrome.exe", shell=True, check=False)
+    subprocess.run(
+        ["taskkill", "/F", "/IM", "chrome.exe"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     time.sleep(1)
 
     chrome = _chrome_path()
@@ -127,9 +132,12 @@ def main() -> None:
         if not ok:
             raise SystemExit(2)
     finally:
-        subprocess.run("taskkill /F /IM chrome.exe", shell=True, check=False)
-        time.sleep(0.5)
-
+        if proc.poll() is None:
+            proc.terminate()
+            time.sleep(0.5)
+        if proc.poll() is None:
+            proc.kill()
 
 if __name__ == "__main__":
     main()
+

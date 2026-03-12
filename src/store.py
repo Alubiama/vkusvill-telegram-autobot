@@ -217,3 +217,7 @@ class StateStore:
         with self._connect() as conn:
             conn.execute("DELETE FROM votes WHERE day = ?", (day,))
             conn.execute("DELETE FROM items WHERE day = ?", (day,))
+
+    def clear_votes(self, day: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM votes WHERE day = ?", (day,))

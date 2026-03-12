@@ -9,6 +9,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from playwright.sync_api import sync_playwright
 
@@ -59,6 +60,98 @@ def _normalize_image_url(value: str) -> str:
     if raw.startswith("/"):
         return f"https://vkusvill.ru{raw}"
     return raw
+
+
+def _needs_image_backfill(value: str) -> bool:
+    raw = (value or "").strip().lower()
+    return (not raw) or ("no-image.svg" in raw)
+
+
+def _name_tokens(value: str) -> list[str]:
+    norm = _normalize_ws(value).lower().replace("ё", "е")
+    norm = re.sub(r"[\"'`“”„()\[\]{}:;,.!?/+\\-]", " ", norm)
+    return [x for x in norm.split() if len(x) >= 3]
+
+
+def _best_image_from_search(page, name: str) -> str:
+    page.goto(
+        f"https://vkusvill.ru/search/?q={quote_plus(name)}",
+        wait_until="domcontentloaded",
+        timeout=120_000,
+    )
+    page.wait_for_timeout(1100)
+
+    rows = page.evaluate(
+        """
+        () => {
+          const norm = (s) => (s || '')
+            .replace(/\\u00a0/g, ' ')
+            .replace(/\\s+/g, ' ')
+            .trim()
+            .toLowerCase()
+            .replace(/ё/g, 'е');
+          const cards = Array.from(
+            document.querySelectorAll('.js-datalayer-catalog-list-item[data-xmlid], .js-product-cart')
+          );
+          const out = [];
+          for (const el of cards) {
+            if (!el || el.offsetParent === null) continue;
+            const n =
+              norm((el.querySelector('.js-datalayer-catalog-list-name') || {}).innerText || '') ||
+              norm((el.querySelector('[class*="name"]') || {}).innerText || '');
+            if (!n) continue;
+            const image =
+              (el.querySelector('img') || {}).getAttribute?.('src') ||
+              (el.querySelector('img') || {}).getAttribute?.('data-src') ||
+              '';
+            if (!image) continue;
+            out.push({ name: n, image: String(image).trim() });
+          }
+          return out;
+        }
+        """
+    )
+    if not rows:
+        return ""
+
+    query_tokens = set(_name_tokens(name))
+    name_norm = _normalize_ws(name).lower().replace("ё", "е")
+    best_score = -1
+    best_image = ""
+    for row in rows:
+        rn = _normalize_ws(str(row.get("name") or "")).lower().replace("ё", "е")
+        if not rn:
+            continue
+        rt = set(_name_tokens(rn))
+        score = len(query_tokens.intersection(rt)) * 2
+        if name_norm in rn or rn in name_norm:
+            score += 3
+        if score > best_score:
+            best_score = score
+            best_image = str(row.get("image") or "")
+
+    image = _normalize_image_url(best_image)
+    if _needs_image_backfill(image):
+        return ""
+    return image
+
+
+def _backfill_missing_images(page, items: list[DiscountItem], max_items: int = 12) -> int:
+    updated = 0
+    for item in items:
+        if updated >= max_items:
+            break
+        if not _needs_image_backfill(item.image_url):
+            continue
+        try:
+            image = _best_image_from_search(page, item.name)
+        except Exception:
+            continue
+        if not image:
+            continue
+        item.image_url = image
+        updated += 1
+    return updated
 
 
 def _log(message: str) -> None:
@@ -911,6 +1004,9 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
             if extra:
                 _log(f"[collector] offers ready food: +{len(extra)} items")
                 items = _merge_items_unique(items, extra)
+        backfilled = _backfill_missing_images(page, items, max_items=14)
+        if backfilled > 0:
+            _log(f"[collector] image backfill: +{backfilled}")
         browser.close()
     return items
 
@@ -1010,6 +1106,9 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                     if extra:
                         _log(f"[collector] offers ready food: +{len(extra)} items")
                         items = _merge_items_unique(items, extra)
+                backfilled = _backfill_missing_images(page, items, max_items=14)
+                if backfilled > 0:
+                    _log(f"[collector] image backfill: +{backfilled}")
                 context.close()
                 return items
             _save_debug(page, "system_chrome_not_logged_in")
@@ -1033,6 +1132,9 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
             if extra:
                 _log(f"[collector] offers ready food: +{len(extra)} items")
                 items = _merge_items_unique(items, extra)
+        backfilled = _backfill_missing_images(page, items, max_items=14)
+        if backfilled > 0:
+            _log(f"[collector] image backfill: +{backfilled}")
         context.close()
 
     return items

@@ -1,13 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import logging
+import os
+import re
 import subprocess
 import sys
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -24,12 +27,14 @@ from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    Defaults,
     ContextTypes,
     MessageHandler,
     filters,
 )
 
 from .config import Settings
+from .command_utils import command_to_args, project_root
 from .providers import BaseProvider
 from .store import StateStore
 
@@ -97,6 +102,15 @@ class VkusvillGroupBot:
             return
         await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
 
+    async def _send_owner(self, app: Application, text: str, **kwargs) -> None:
+        owner_id = self._get_owner_user_id()
+        if owner_id is None:
+            return
+        try:
+            await app.bot.send_message(chat_id=owner_id, text=text, **kwargs)
+        except Exception:
+            LOGGER.warning("Failed to send private owner message: %s", text[:120])
+
     def _trace_webapp(self, message: str) -> None:
         try:
             out_dir = Path(self.settings.out_dir)
@@ -107,6 +121,173 @@ class VkusvillGroupBot:
                 fp.write(f"[{ts}] {message}\n")
         except Exception:
             pass
+
+    def _cleanup_out_dir(self) -> int:
+        days = max(1, int(self.settings.out_retention_days))
+        out_dir = Path(self.settings.out_dir)
+        if not out_dir.exists():
+            return 0
+
+        cutoff = datetime.now(self.settings.timezone) - timedelta(days=days)
+        cutoff_ts = cutoff.timestamp()
+        removed = 0
+        for path in out_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                if path.stat().st_mtime < cutoff_ts:
+                    path.unlink()
+                    removed += 1
+            except Exception:
+                continue
+
+        # Optional tidy-up: remove empty folders left after file cleanup.
+        for path in sorted(out_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            if not path.is_dir():
+                continue
+            try:
+                next(path.iterdir())
+            except StopIteration:
+                try:
+                    path.rmdir()
+                except Exception:
+                    pass
+            except Exception:
+                continue
+        return removed
+
+    async def scheduled_cleanup(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        removed = self._cleanup_out_dir()
+        if removed > 0:
+            LOGGER.info("Out-dir cleanup removed %s file(s) older than %s days", removed, self.settings.out_retention_days)
+
+    def _now_iso(self) -> str:
+        return datetime.now(self.settings.timezone).isoformat(timespec="seconds")
+
+    def _build_command_args(self, command_template: str, out_path: Path, extra: list[str] | None = None) -> list[str]:
+        cmd = (command_template or "").replace("{order_file}", str(out_path))
+        cmd = os.path.expandvars(cmd)
+        args = command_to_args(cmd)
+        if extra:
+            args.extend(extra)
+        return args
+
+    @staticmethod
+    def _extract_payload(raw_text: str) -> dict | None:
+        text = (raw_text or "").strip()
+        if not text:
+            return None
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in reversed(lines):
+            try:
+                parsed = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                return None
+        return None
+
+    def _run_cmd_capture(self, args: list[str], timeout_sec: int | None = None) -> subprocess.CompletedProcess[str]:
+        if not args:
+            raise ValueError("Empty command args")
+        return subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+            shell=False,
+            cwd=str(project_root()),
+            timeout=timeout_sec,
+        )
+
+    def _build_rpa_probe_args(self) -> list[str]:
+        if self.settings.provider != "rpa_command" or not self.settings.rpa_command:
+            return []
+
+        args = command_to_args(self.settings.rpa_command)
+        if not args:
+            return []
+
+        drop_flags = {
+            "--interactive-login",
+            "--require-distinct-waves",
+        }
+        drop_with_value = {
+            "--waves",
+            "--max-items",
+            "--offers-ready-food-url",
+            "--offers-ready-food-max",
+            "--out-file",
+        }
+
+        cleaned: list[str] = []
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            key = arg.split("=", 1)[0] if arg.startswith("--") else arg
+            if key in drop_flags:
+                i += 1
+                continue
+            if key in drop_with_value:
+                if "=" in arg:
+                    i += 1
+                else:
+                    i += 2
+                continue
+            cleaned.append(arg)
+            i += 1
+
+        probe_out = str(Path(self.settings.out_dir) / "session_probe.json")
+        cleaned.extend(
+            [
+                "--waves",
+                "1",
+                "--max-items",
+                "1",
+                "--out-file",
+                probe_out,
+            ]
+        )
+        if "--headless" not in cleaned and "--no-headless" not in cleaned:
+            cleaned.append("--headless")
+        return cleaned
+
+    async def _run_session_probe(self) -> tuple[bool, str]:
+        args = self._build_rpa_probe_args()
+        if not args:
+            return True, "probe_not_configured"
+
+        try:
+            proc = await asyncio.to_thread(self._run_cmd_capture, args, 180)
+        except Exception as exc:
+            return False, str(exc)
+
+        out = (proc.stdout or "").strip()
+        err = (proc.stderr or "").strip()
+        raw = "\n".join(x for x in [out, err] if x).strip()
+        payload = self._extract_payload(raw)
+
+        if proc.returncode == 0:
+            ok_msg = "ok"
+            if isinstance(payload, dict):
+                ok_msg = str(payload.get("message") or ok_msg)
+            return True, ok_msg
+
+        detail = ""
+        if isinstance(payload, dict):
+            detail = str(payload.get("error") or payload.get("message") or payload.get("status") or "").strip()
+        if not detail:
+            detail = (raw or f"returncode={proc.returncode}").splitlines()[-1]
+        return False, detail[:240]
 
     @staticmethod
     def _is_favorite_item(name: str, source: str) -> bool:
@@ -190,7 +371,15 @@ class VkusvillGroupBot:
             base = raw.split("?", 1)[0]
             prefix = "https://img.vkusvill.ru/pim/images/"
             if base.startswith(prefix):
-                return f"vv:{base[len(prefix):]}"
+                tail = base[len(prefix) :]
+                # Ultra-compact form for most VkusVill image paths.
+                # vi:0:<uuid> -> /site_MiniWebP/<uuid>.webp
+                # vi:1:<uuid> -> /site/site_MiniWebP/<uuid>.webp
+                m = re.match(r"^(site/)?site_MiniWebP/([0-9a-fA-F-]{36})\.webp$", tail)
+                if m:
+                    variant = "1" if m.group(1) else "0"
+                    return f"vi:{variant}:{m.group(2).lower()}"
+                return f"vv:{tail}"
             return base
 
         compact_payload = {
@@ -405,18 +594,40 @@ class VkusvillGroupBot:
         ]
         await update.message.reply_text("\n".join(lines))
 
+    async def sessioncheck(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        ok, detail = await self._run_session_probe()
+        self.store.set_meta("last_sessioncheck_at", self._now_iso())
+        self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
+        self.store.set_meta("last_sessioncheck_detail", detail)
+
+        if ok:
+            await update.message.reply_text("Сессия ВкусВилл: OK.")
+        else:
+            await update.message.reply_text(f"Сессия ВкусВилл требует входа: {detail}")
+
     async def _collect_impl(self, app: Application, skip_if_full: bool = False) -> None:
         now = datetime.now(self.settings.timezone)
         day = now.strftime("%Y-%m-%d")
+        existing = self.store.list_items(day)
+        existing_regular_count = self._regular_inshop_count(existing)
         if skip_if_full:
-            existing = self.store.list_items(day)
-            regular_count = self._regular_inshop_count(existing)
-            if regular_count >= 18:
-                LOGGER.info("Skip scheduled collect: already have %s regular inshop items for %s", regular_count, day)
+            if existing_regular_count >= 18:
+                LOGGER.info(
+                    "Skip scheduled collect: already have %s regular inshop items for %s",
+                    existing_regular_count,
+                    day,
+                )
                 return
         try:
-            items = self.provider.fetch(now)
+            items = await asyncio.to_thread(self.provider.fetch, now)
         except Exception as exc:
+            self.store.set_meta("last_collect_at", self._now_iso())
+            self.store.set_meta("last_collect_status", "error")
             await self._send(
                 app,
                 f"Сбор скидок не удался: {exc}. Проверь сессию ВкусВилл и настройки сборщика.",
@@ -424,11 +635,37 @@ class VkusvillGroupBot:
             LOGGER.exception("Collect failed")
             return
 
+        fetched_regular_count = self._regular_inshop_count(items)
+        # Guard against accidental downgrade when replacement limit is reached:
+        # if we already have full 18/18, do not overwrite with a partial wave.
+        if existing_regular_count >= 18 and fetched_regular_count < 18:
+            existing_favorite_count = sum(1 for x in existing if self._is_favorite_item(x.name, x.source))
+            existing_ready_food_count = sum(1 for x in existing if self._is_ready_food_offer(x.source))
+            self.store.set_meta("last_collect_at", self._now_iso())
+            self.store.set_meta("last_collect_status", "guard_preserve_full")
+            self.store.set_meta("last_collect_day", day)
+            self.store.set_meta("last_collect_regular_count", str(existing_regular_count))
+            self.store.set_meta("last_collect_total_items", str(len(existing)))
+            await self._send(
+                app,
+                (
+                    f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
+                    f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
+                    f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                ),
+            )
+            return
+
         fresh, removed = self.store.sync_items(day, [x.to_row() for x in items])
         all_items = self.store.list_items(day)
         regular_count = self._regular_inshop_count(all_items)
         favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
+        self.store.set_meta("last_collect_at", self._now_iso())
+        self.store.set_meta("last_collect_status", "ok")
+        self.store.set_meta("last_collect_day", day)
+        self.store.set_meta("last_collect_regular_count", str(regular_count))
+        self.store.set_meta("last_collect_total_items", str(len(all_items)))
         await self._send(
             app,
             (
@@ -441,6 +678,17 @@ class VkusvillGroupBot:
 
     async def scheduled_collect(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._collect_impl(context.application, skip_if_full=True)
+
+    async def scheduled_sessioncheck(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ok, detail = await self._run_session_probe()
+        self.store.set_meta("last_sessioncheck_at", self._now_iso())
+        self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
+        self.store.set_meta("last_sessioncheck_detail", detail)
+        if not ok:
+            await self._send(
+                context.application,
+                f"Проверка сессии ВкусВилл: требуется вход в Chrome-профиль ({detail}).",
+            )
 
     async def shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_user is None:
@@ -595,7 +843,11 @@ class VkusvillGroupBot:
         )
         if ptype == "single_choice":
             item_id = str(payload.get("item_id") or "")
-            qty = int(payload.get("qty") or 0)
+            try:
+                qty = int(payload.get("qty") or 0)
+            except (TypeError, ValueError):
+                await update.message.reply_text("Некорректное значение qty в Mini App payload.")
+                return
             if item_id not in items_by_id:
                 self._trace_webapp(f"single_choice_not_found item_id={item_id}")
                 await update.message.reply_text("Item not found for today.")
@@ -624,11 +876,30 @@ class VkusvillGroupBot:
             for item_id, raw_qty in qty_map.items():
                 if item_id not in items_by_id:
                     continue
-                qty = max(0, int(raw_qty))
+                try:
+                    qty = max(0, int(raw_qty))
+                except (TypeError, ValueError):
+                    continue
                 self.store.set_vote(day, user_id, user_name, item_id, qty)
                 touched += 1
                 if qty > 0:
                     selected_positive += 1
+
+            selected_rows: list[tuple[str, int]] = []
+            for item in items:
+                qty = int(self.store.get_user_qty(day, user_id, item.item_id))
+                if qty > 0:
+                    selected_rows.append((item.name, qty))
+            preview_limit = 8
+            preview_rows = selected_rows[:preview_limit]
+            selected_preview = "\n".join([f"- {name}: {qty} шт" for name, qty in preview_rows])
+            extra_count = max(0, len(selected_rows) - preview_limit)
+            if extra_count > 0:
+                selected_preview = (
+                    f"{selected_preview}\n- ... и еще {extra_count} поз."
+                    if selected_preview
+                    else f"- ... и еще {extra_count} поз."
+                )
 
             if touched == 0:
                 self._trace_webapp("all_choices_touched_0")
@@ -651,13 +922,18 @@ class VkusvillGroupBot:
                 )
             else:
                 msg = f"Сохранено: {selected_positive} товаров (обновлено {touched})."
+            if selected_preview:
+                msg = f"{msg}\nТвой выбор:\n{selected_preview}"
             await update.message.reply_text(msg)
             bound_chat_id = self._get_chat_id()
             current_chat = update.effective_chat.id if update.effective_chat else None
             if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
+                group_msg = f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched})."
+                if selected_preview:
+                    group_msg = f"{group_msg}\nВыбор:\n{selected_preview}"
                 await self._send(
                     context.application,
-                    f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched}).",
+                    group_msg[:3900],
                 )
             return
 
@@ -796,7 +1072,13 @@ class VkusvillGroupBot:
             "--headless",
         ]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
         except subprocess.CalledProcessError as exc:
             err = (exc.stderr or exc.stdout or str(exc)).strip()
             await update.message.reply_text(f"Cart scan failed:\n{err[:3000]}")
@@ -866,6 +1148,15 @@ class VkusvillGroupBot:
             f"Состояние за {day} очищено. Автосбор снова заполнит товары по расписанию."
         )
 
+    async def clearvotes(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        day = self._today()
+        self.store.clear_votes(day)
+        await update.message.reply_text(f"Выборы за {day} очищены. Можно собирать новый заказ.")
+
     def _schedule_startup_collect_if_needed(self, app: Application) -> None:
         day = self._today()
         if self.store.list_items(day):
@@ -897,6 +1188,14 @@ class VkusvillGroupBot:
         Path(self.settings.out_dir).mkdir(parents=True, exist_ok=True)
         out_path = Path(self.settings.out_dir) / f"order_{day}.json"
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        backup_path = (
+            Path(self.settings.out_dir)
+            / f"votes_backup_{day}_{datetime.now(self.settings.timezone).strftime('%H%M%S')}.json"
+        )
+        backup_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.store.set_meta("last_finalize_at", self._now_iso())
+        self.store.set_meta("last_finalize_day", day)
+        self.store.set_meta("last_finalize_backup", str(backup_path))
 
         if not payload["items"]:
             await self._send(app, f"Итог за {day}: никто не выбрал товары.")
@@ -908,40 +1207,278 @@ class VkusvillGroupBot:
                 f"- {row['name']}: {int(row['qty'])} шт x {float(row['discount_price']):.2f} RUB"
             )
         lines.append(f"Сумма: {payload['total_sum_discount_price']:.2f} RUB")
-        lines.append(f"Файл: {out_path}")
         if self.settings.dry_run:
             lines.append("Режим: DRY_RUN (автооформление отключено)")
 
         await self._send(app, "\n".join(lines))
-        await self._run_executor_if_needed(app, out_path)
+        await self._send_owner(
+            app,
+            (
+                f"Итог за {day} сохранен.\n"
+                f"Файл заказа: {out_path}\n"
+                f"Резерв голосов: {backup_path}"
+            ),
+        )
+        exec_result = await self._run_executor_if_needed(app, out_path)
+        if bool(exec_result.get("ok")):
+            self.store.clear_votes(day)
+            await self._send(app, "Выборы за текущий день сброшены. Можно собирать новый заказ с нуля.")
+        else:
+            await self._send(
+                app,
+                (
+                    "Выборы НЕ очищены: автооформление не завершилось успешно. "
+                    f"Резерв: {backup_path}"
+                ),
+            )
 
-    async def _run_executor_if_needed(self, app: Application, out_path: Path) -> None:
+    async def _run_executor_if_needed(self, app: Application, out_path: Path) -> dict:
         if self.settings.dry_run:
-            return
+            self.store.set_meta("last_executor_at", self._now_iso())
+            self.store.set_meta("last_executor_status", "dry_run_skip")
+            return {"ok": True, "status": "dry_run_skip"}
         if not self.settings.order_executor_command:
             await self._send(app, "ORDER_EXECUTOR_COMMAND не задан. Автооформление пропущено.")
-            return
+            self.store.set_meta("last_executor_at", self._now_iso())
+            self.store.set_meta("last_executor_status", "missing_command")
+            return {"ok": False, "status": "missing_command"}
 
-        cmd = self.settings.order_executor_command.replace("{order_file}", str(out_path))
+        args = self._build_command_args(self.settings.order_executor_command, out_path)
+        if not args:
+            await self._send(app, "ORDER_EXECUTOR_COMMAND пустой после разбора. Автооформление пропущено.")
+            self.store.set_meta("last_executor_at", self._now_iso())
+            self.store.set_meta("last_executor_status", "empty_command")
+            return {"ok": False, "status": "empty_command"}
+
+        log_path = Path(self.settings.out_dir) / "executor_last.log"
+
         try:
-            proc = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                shell=True,
+            # Session preflight: fail fast before cart automation.
+            preflight_args = args + ["--check-session-only"]
+            preflight = await asyncio.to_thread(self._run_cmd_capture, preflight_args, 90)
+            pre_raw = "\n".join(x for x in [(preflight.stdout or "").strip(), (preflight.stderr or "").strip()] if x).strip()
+            pre_payload = self._extract_payload(pre_raw)
+            pre_ok = preflight.returncode == 0 and (
+                not isinstance(pre_payload, dict) or bool(pre_payload.get("ok", True))
             )
+            if not pre_ok:
+                await self._send(
+                    app,
+                    "Сессия ВкусВилл недействительна. Пробую открыть браузер для автообновления сессии...",
+                )
+                refresh_args = preflight_args + [
+                    "--interactive-login",
+                    "--interactive-login-wait-sec",
+                    "180",
+                    "--no-headless",
+                ]
+                refreshed = await asyncio.to_thread(self._run_cmd_capture, refresh_args, 240)
+                refresh_raw = "\n".join(
+                    x for x in [(refreshed.stdout or "").strip(), (refreshed.stderr or "").strip()] if x
+                ).strip()
+                refresh_payload = self._extract_payload(refresh_raw)
+                refresh_ok = refreshed.returncode == 0 and (
+                    not isinstance(refresh_payload, dict) or bool(refresh_payload.get("ok", True))
+                )
+                if not refresh_ok:
+                    short = (refresh_raw or "session_check_failed").splitlines()[-1][:240]
+                    await self._send(
+                        app,
+                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({short}).",
+                    )
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "session_invalid")
+                    return {"ok": False, "status": "session_invalid", "log_path": str(log_path)}
+
+            proc = await asyncio.to_thread(self._run_cmd_capture, args, 420)
             output = (proc.stdout or "").strip()
-            if output:
-                await self._send(app, f"Executor OK:\n{output[:3000]}")
+            err = (proc.stderr or "").strip()
+            raw = "\n".join(x for x in [output, err] if x).strip()
+            payload = self._extract_payload(raw)
+
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_path.write_text(
+                    (
+                        f"cmd: {args}\n"
+                        f"returncode: {proc.returncode}\n"
+                        f"--- stdout ---\n{output}\n"
+                        f"--- stderr ---\n{err}\n"
+                    ),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+
+            if isinstance(payload, dict):
+                if payload.get("error"):
+                    err_short = str(payload.get("error") or "").strip().splitlines()[0][:220]
+                    await self._send(app, f"Автодобавление не сработало: {err_short}\nТехлог: {log_path}")
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "failed_error")
+                    return {"ok": False, "status": "failed_error", "log_path": str(log_path)}
+                checks = payload.get("checks") or []
+                ok_count = sum(1 for x in checks if bool((x or {}).get("ok")))
+                total = int(payload.get("targets") or len(checks) or 0)
+                if total <= 0:
+                    msg = str(payload.get("message") or "").strip()
+                    if msg == "no_selected_items":
+                        await self._send(app, "В заказе нет выбранных позиций.")
+                    else:
+                        await self._send(app, f"Корзина обновлена. Техлог: {log_path}")
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "success_no_targets")
+                    return {"ok": True, "status": "success_no_targets", "log_path": str(log_path)}
+                failed = max(0, total - ok_count)
+                cart_unique = int(payload.get("cart_unique_after") or 0)
+                cart_total_qty = int(payload.get("cart_total_qty_after") or 0)
+                if bool(payload.get("ok")) and failed == 0:
+                    msg = f"Корзина обновлена: {ok_count}/{total} позиций."
+                    if cart_unique > 0:
+                        msg += f"\nВ корзине сейчас: {cart_unique} позиций, суммарное кол-во: {cart_total_qty}."
+                    await self._send(app, msg)
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "success")
+                    self.store.set_meta("last_executor_ok_count", str(ok_count))
+                    self.store.set_meta("last_executor_total", str(total))
+                    return {"ok": True, "status": "success", "log_path": str(log_path)}
+                else:
+                    lines = [f"Корзина обновлена частично: {ok_count}/{total}, не добавлено {failed}."]
+                    if bool(payload.get("breaker_triggered")):
+                        threshold = int(payload.get("breaker_threshold") or 0)
+                        lines.append(
+                            f"Защитная остановка: подряд ошибок {threshold}. Остальные позиции пропущены."
+                        )
+                    reason_map = {
+                        "no_add_button": "нет кнопки добавления",
+                        "no_add_button_on_product": "на странице товара нет кнопки добавления",
+                        "offers_xmlid_missing": "у позиции нет xmlid для страницы акций",
+                        "offers_card_not_found": "карточка товара не найдена в «Готовой еде»",
+                        "offers_click_failed": "клик по кнопке на странице «Готовая еда» не сработал",
+                        "offers_plus_click_failed": "клик по кнопке + на странице «Готовая еда» не сработал",
+                        "no_card": "карточка товара не найдена",
+                        "no_product_link": "не найдена ссылка на товар",
+                        "bad_product_link": "некорректная ссылка на товар",
+                        "product_page_fallback_failed": "fallback через страницу товара не сработал",
+                        "requires_tomorrow_delivery": "товар доступен только в режиме «доставить завтра»",
+                        "no_card_for_ajax": "для ajax fallback не нашли карточку",
+                        "no_product_id_for_ajax": "для ajax fallback не нашли id товара",
+                        "ajax_add_failed": "ajax-добавление вернуло ошибку",
+                        "ajax_request_error": "ошибка ajax-запроса",
+                        "ajax_rescue_exception": "сбой в ajax fallback",
+                        "unavailable": "нет в наличии/недоступен",
+                        "search_failed": "ошибка поиска",
+                        "partial_added": "добавлено частично",
+                        "partial_added_ajax": "добавлено частично через ajax fallback",
+                        "rescued_via_ajax": "добавлено через ajax fallback",
+                        "ajax_call_no_effect": "ajax fallback выполнен, но корзина не изменилась",
+                        "click_no_effect_ajax_failed": "кнопка не сработала и ajax fallback тоже не добавил",
+                        "click_no_effect": "кнопка нажалась, но товар не появился в корзине",
+                        "circuit_breaker_open": "пропущено из-за защитной остановки",
+                        "not_added_to_cart": "не удалось добавить",
+                    }
+                    bad = [x for x in checks if not bool((x or {}).get("ok"))][:6]
+                    for row in bad:
+                        reason = str(row.get("reason") or "not_added_to_cart")
+                        reason_h = reason_map.get(reason, reason)
+                        lines.append(
+                            (
+                                f"- {row.get('name', '?')}: было {row.get('before_qty', 0)}, "
+                                f"стало {row.get('after_qty', 0)} ({reason_h})"
+                            )
+                        )
+                    if cart_unique > 0:
+                        lines.append(f"В корзине сейчас: {cart_unique} позиций, суммарное кол-во: {cart_total_qty}.")
+                    lines.append(f"Техлог: {log_path}")
+                    await self._send(app, "\n".join(lines))
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "partial")
+                    self.store.set_meta("last_executor_ok_count", str(ok_count))
+                    self.store.set_meta("last_executor_total", str(total))
+                    return {"ok": False, "status": "partial", "log_path": str(log_path)}
             else:
-                await self._send(app, "Executor OK.")
-        except subprocess.CalledProcessError as exc:
-            err = (exc.stderr or exc.stdout or str(exc)).strip()
-            await self._send(app, f"Executor FAILED:\n{err[:3000]}")
+                if proc.returncode == 0:
+                    await self._send(app, f"Корзина обновлена. Техлог: {log_path}")
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "success_no_payload")
+                    return {"ok": True, "status": "success_no_payload", "log_path": str(log_path)}
+                else:
+                    await self._send(app, f"Автодобавление не сработало. Техлог: {log_path}")
+                    self.store.set_meta("last_executor_at", self._now_iso())
+                    self.store.set_meta("last_executor_status", "failed_no_payload")
+                    return {"ok": False, "status": "failed_no_payload", "log_path": str(log_path)}
+        except Exception as exc:
+            await self._send(app, f"Executor FAILED: {exc}")
+            self.store.set_meta("last_executor_at", self._now_iso())
+            self.store.set_meta("last_executor_status", "exception")
+            return {"ok": False, "status": "exception", "error": str(exc), "log_path": str(log_path)}
 
     async def scheduled_finalize(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._finalize_impl(context.application)
+
+    async def health(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        day = self._today()
+        items = self.store.list_items(day)
+        regular_count = self._regular_inshop_count(items)
+        favorite_count = sum(1 for x in items if self._is_favorite_item(x.name, x.source))
+        ready_food_count = sum(1 for x in items if self._is_ready_food_offer(x.source))
+        totals = self.store.totals_by_item(day)
+        active_votes = sum(1 for row in totals if int(row.get("qty") or 0) > 0)
+        users = self.store.votes_by_user(day)
+
+        bound_chat = self._get_chat_id()
+        owner_id = self._get_owner_user_id()
+        has_rpa = bool(self.settings.rpa_command) if self.settings.provider == "rpa_command" else True
+        has_executor = bool(self.settings.order_executor_command)
+        last_collect_at = self.store.get_meta("last_collect_at") or "n/a"
+        last_collect_status = self.store.get_meta("last_collect_status") or "n/a"
+        last_sessioncheck_at = self.store.get_meta("last_sessioncheck_at") or "n/a"
+        last_sessioncheck_status = self.store.get_meta("last_sessioncheck_status") or "n/a"
+        last_executor_at = self.store.get_meta("last_executor_at") or "n/a"
+        last_executor_status = self.store.get_meta("last_executor_status") or "n/a"
+        last_executor_ok = self.store.get_meta("last_executor_ok_count") or "n/a"
+        last_executor_total = self.store.get_meta("last_executor_total") or "n/a"
+
+        problems: list[str] = []
+        if bound_chat is None:
+            problems.append("чат не привязан (/bind)")
+        if owner_id is None:
+            problems.append("не задан owner (/setowner)")
+        if not has_rpa:
+            problems.append("не задан RPA_COMMAND")
+        if not has_executor and not self.settings.dry_run:
+            problems.append("не задан ORDER_EXECUTOR_COMMAND")
+        if regular_count < 6:
+            problems.append("мало данных в подборках (меньше 6 товаров)")
+        if last_collect_status == "error":
+            problems.append("последний collect завершился ошибкой")
+        if last_sessioncheck_status == "error":
+            problems.append("сессия ВкусВилл требует входа")
+        if last_executor_status in {"failed_error", "failed_no_payload", "exception", "session_invalid"}:
+            problems.append(f"последний executor в ошибке ({last_executor_status})")
+
+        state = "HEALTHY" if not problems else "DEGRADED"
+        lines = [
+            f"Health {day}: {state}",
+            f"- chat_id: {bound_chat}",
+            f"- owner_id: {owner_id}",
+            f"- provider: {self.settings.provider}",
+            f"- dry_run: {self.settings.dry_run}",
+            f"- items: total={len(items)}, regular={regular_count}/18, favorite={favorite_count}, ready_food={ready_food_count}",
+            f"- votes: users={len(users)}, selected_positions={active_votes}",
+            f"- last_collect: status={last_collect_status}, at={last_collect_at}",
+            f"- last_sessioncheck: status={last_sessioncheck_status}, at={last_sessioncheck_at}",
+            f"- last_executor: status={last_executor_status}, at={last_executor_at}, ok_count={last_executor_ok}/{last_executor_total}",
+        ]
+        if problems:
+            lines.append("- issues:")
+            lines.extend([f"  * {p}" for p in problems])
+        await update.message.reply_text("\n".join(lines))
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -955,7 +1492,10 @@ class VkusvillGroupBot:
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
+            "/clearvotes - очистить только выборы за сегодня (owner)\n"
             "/cart - сверить корзину с сегодняшними скидками (owner)\n"
+            "/sessioncheck - проверка логина Chrome-профиля (owner)\n"
+            "/health - быстрый статус бота (owner)\n"
             "/setowner - назначить/проверить owner\n"
             "/selftest - быстрая проверка состояния (owner)\n"
             "/hidekbd - скрыть клавиатуру\n"
@@ -963,7 +1503,23 @@ class VkusvillGroupBot:
         )
 
     def build_app(self) -> Application:
-        app = Application.builder().token(self.settings.bot_token).build()
+        app = (
+            Application.builder()
+            .token(self.settings.bot_token)
+            .defaults(Defaults(tzinfo=self.settings.timezone))
+            .build()
+        )
+        try:
+            Path(self.settings.out_dir).mkdir(parents=True, exist_ok=True)
+            removed = self._cleanup_out_dir()
+            if removed > 0:
+                LOGGER.info(
+                    "Startup out-dir cleanup removed %s file(s) older than %s days",
+                    removed,
+                    self.settings.out_retention_days,
+                )
+        except Exception:
+            pass
 
         app.add_handler(CommandHandler("start", self.start))
         app.add_handler(CommandHandler("bind", self.bind))
@@ -977,9 +1533,12 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("hidekbd", self.hidekbd))
         app.add_handler(CommandHandler("status", self.status))
         app.add_handler(CommandHandler("cart", self.cart))
+        app.add_handler(CommandHandler("health", self.health))
         app.add_handler(CommandHandler("finalize", self.finalize))
         app.add_handler(CommandHandler("collectnow", self.collectnow))
         app.add_handler(CommandHandler("resetday", self.resetday))
+        app.add_handler(CommandHandler("clearvotes", self.clearvotes))
+        app.add_handler(CommandHandler("sessioncheck", self.sessioncheck))
         app.add_handler(CommandHandler("help", self.help))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_button))
         app.add_handler(CallbackQueryHandler(self.on_control, pattern=r"^ctl\|"))
@@ -993,10 +1552,24 @@ class VkusvillGroupBot:
                 time=t,
                 name=f"collect-{t.hour:02d}:{t.minute:02d}",
             )
+        if self.settings.provider == "rpa_command":
+            app.job_queue.run_daily(
+                self.scheduled_sessioncheck,
+                time=datetime.strptime("23:50", "%H:%M").time(),
+                name="sessioncheck-23:50",
+            )
         app.job_queue.run_daily(
             self.scheduled_finalize,
             time=self.settings.order_deadline,
             name="finalize",
         )
+        app.job_queue.run_daily(
+            self.scheduled_cleanup,
+            time=datetime.strptime("03:10", "%H:%M").time(),
+            name="cleanup-out-dir",
+        )
         self._schedule_startup_collect_if_needed(app)
         return app
+
+
+
