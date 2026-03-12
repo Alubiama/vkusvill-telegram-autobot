@@ -464,10 +464,19 @@
       return s;
     }
 
-    function buildImageCandidates(raw) {
+    function buildImageCandidates(raw, itemId) {
       const first = expandImageUrl(raw);
       if (!first) return [];
       const out = [first];
+      const mirrorPath = imageMirrorMap[String(itemId || "")] || "";
+      if (mirrorPath) {
+        if (mirrorPath.startsWith("http://") || mirrorPath.startsWith("https://")) {
+          if (!out.includes(mirrorPath)) out.push(mirrorPath);
+        } else {
+          const rel = mirrorPath.startsWith("/") ? mirrorPath : `/${mirrorPath}`;
+          if (!out.includes(rel)) out.push(rel);
+        }
+      }
       const base = first.split("?")[0];
       const hasWebp = /\.webp$/i.test(base);
       const push = (value) => {
@@ -507,6 +516,7 @@
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const day = payload.day || payload.d || today;
     const snapshotId = String(payload.snapshot_id || payload.sid || "");
+    let imageMirrorMap = {};
     document.getElementById("day").textContent = day;
     document.getElementById("appMeta").textContent = `Vkusvill Mini App - ${BUILD_ID}`;
 
@@ -759,7 +769,7 @@
       thumb.className = "thumb";
       const imageUrl = String(item.image_url || "").trim();
       if (imageUrl) {
-        const candidates = buildImageCandidates(imageUrl);
+        const candidates = buildImageCandidates(imageUrl, item.item_id);
         const img = document.createElement("img");
         img.alt = item.name;
         img.loading = "lazy";
@@ -864,6 +874,22 @@
       }
     }
 
+    async function loadImageMirrorMap() {
+      try {
+        const stamp = String(day || "").replace(/-/g, "");
+        const resp = await fetch(`./img-cache/current/map.json?v=${encodeURIComponent(stamp)}`, {
+          cache: "no-store",
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data || typeof data.items !== "object" || !data.items) return;
+        imageMirrorMap = data.items;
+        renderGroup();
+      } catch (_err) {
+        // Primary source remains VkusVill CDN.
+      }
+    }
+
     function sendAll() {
       const btn = document.getElementById("sendAllBtn");
       if (btn) {
@@ -907,6 +933,7 @@
     updateOverview();
     renderTabs();
     renderGroup();
+    loadImageMirrorMap();
   </script>
 </body>
 </html>

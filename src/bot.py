@@ -289,6 +289,37 @@ class VkusvillGroupBot:
             detail = (raw or f"returncode={proc.returncode}").splitlines()[-1]
         return False, detail[:240]
 
+    async def _refresh_image_mirror(self, day: str) -> tuple[bool, str]:
+        script_path = Path("scripts") / "build_image_mirror.py"
+        if not script_path.exists():
+            return False, "script_missing"
+
+        args = [
+            sys.executable,
+            str(script_path),
+            "--db-path",
+            self.settings.db_path,
+            "--day",
+            day,
+            "--out-dir",
+            "webapp/img-cache/current",
+        ]
+        try:
+            proc = await asyncio.to_thread(self._run_cmd_capture, args, 240)
+        except Exception as exc:
+            return False, str(exc)
+
+        raw = "\n".join(x for x in [(proc.stdout or "").strip(), (proc.stderr or "").strip()] if x).strip()
+        payload = self._extract_payload(raw)
+        if proc.returncode != 0:
+            detail = (raw or f"returncode={proc.returncode}").splitlines()[-1]
+            return False, detail[:240]
+        if isinstance(payload, dict):
+            mirrored = int(payload.get("mirrored") or 0)
+            failed = int(payload.get("failed") or 0)
+            return True, f"mirrored={mirrored}, failed={failed}"
+        return True, "ok"
+
     @staticmethod
     def _is_favorite_item(name: str, source: str) -> bool:
         src = (source or "").lower()
@@ -550,6 +581,28 @@ class VkusvillGroupBot:
         if update.message:
             await update.message.reply_text("Скидки обновлены.")
 
+    async def mirror(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        day = self._today()
+        if context.args:
+            candidate = str(context.args[0]).strip()
+            if len(candidate) == 10 and candidate[4] == "-" and candidate[7] == "-":
+                day = candidate
+        ok, detail = await self._refresh_image_mirror(day)
+        self.store.set_meta("last_mirror_at", self._now_iso())
+        self.store.set_meta("last_mirror_status", "ok" if ok else "error")
+        self.store.set_meta("last_mirror_detail", detail)
+        if ok:
+            await update.message.reply_text(
+                f"Кэш картинок обновлен за {day}: {detail}.\n"
+                "Чтобы это увидели все в Mini App, нужно запушить изменения на GitHub Pages."
+            )
+            return
+        await update.message.reply_text(f"Кэш картинок не обновлен: {detail}")
+
     async def where(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
             return
@@ -666,12 +719,17 @@ class VkusvillGroupBot:
         self.store.set_meta("last_collect_day", day)
         self.store.set_meta("last_collect_regular_count", str(regular_count))
         self.store.set_meta("last_collect_total_items", str(len(all_items)))
+        mirror_ok, mirror_detail = await self._refresh_image_mirror(day)
+        self.store.set_meta("last_mirror_at", self._now_iso())
+        self.store.set_meta("last_mirror_status", "ok" if mirror_ok else "error")
+        self.store.set_meta("last_mirror_detail", mirror_detail)
         await self._send(
             app,
             (
                 f"Сбор {now.strftime('%H:%M')} завершен. "
                 f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
-                f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}."
+                f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}. "
+                f"Кэш картинок: {mirror_detail}."
             ),
             reply_markup=self._open_showcase_markup(),
         )
@@ -1443,6 +1501,9 @@ class VkusvillGroupBot:
         last_executor_status = self.store.get_meta("last_executor_status") or "n/a"
         last_executor_ok = self.store.get_meta("last_executor_ok_count") or "n/a"
         last_executor_total = self.store.get_meta("last_executor_total") or "n/a"
+        last_mirror_at = self.store.get_meta("last_mirror_at") or "n/a"
+        last_mirror_status = self.store.get_meta("last_mirror_status") or "n/a"
+        last_mirror_detail = self.store.get_meta("last_mirror_detail") or "n/a"
 
         problems: list[str] = []
         if bound_chat is None:
@@ -1473,6 +1534,7 @@ class VkusvillGroupBot:
             f"- votes: users={len(users)}, selected_positions={active_votes}",
             f"- last_collect: status={last_collect_status}, at={last_collect_at}",
             f"- last_sessioncheck: status={last_sessioncheck_status}, at={last_sessioncheck_at}",
+            f"- last_mirror: status={last_mirror_status}, at={last_mirror_at}, detail={last_mirror_detail}",
             f"- last_executor: status={last_executor_status}, at={last_executor_at}, ok_count={last_executor_ok}/{last_executor_total}",
         ]
         if problems:
@@ -1489,6 +1551,7 @@ class VkusvillGroupBot:
             "/where - диагностика чата/owner\n"
             "/bind - привязать текущий чат (owner)\n"
             "/collect - обновить скидки из ВкусВилл (owner)\n"
+            "/mirror [YYYY-MM-DD] - собрать локальный кэш картинок (owner)\n"
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
@@ -1524,6 +1587,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("start", self.start))
         app.add_handler(CommandHandler("bind", self.bind))
         app.add_handler(CommandHandler("collect", self.collect))
+        app.add_handler(CommandHandler("mirror", self.mirror))
         app.add_handler(CommandHandler("setowner", self.setowner))
         app.add_handler(CommandHandler("where", self.where))
         app.add_handler(CommandHandler("selftest", self.selftest))
