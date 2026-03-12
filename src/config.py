@@ -77,6 +77,8 @@ class Settings:
     db_path: str
     out_dir: str
     out_retention_days: int
+    auto_publish_pages: bool
+    publish_pages_command: str | None
 
 
 def load_settings() -> Settings:
@@ -98,4 +100,6 @@ def load_settings() -> Settings:
         db_path=os.getenv("DB_PATH", "data/state.db"),
         out_dir=os.getenv("OUT_DIR", "out"),
         out_retention_days=_parse_positive_int(os.getenv("OUT_RETENTION_DAYS"), 30),
+        auto_publish_pages=_parse_bool(os.getenv("AUTO_PUBLISH_PAGES"), False),
+        publish_pages_command=(os.getenv("PUBLISH_PAGES_COMMAND") or "").strip() or "publish-github-pages.cmd",
     )

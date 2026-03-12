@@ -320,6 +320,30 @@ class VkusvillGroupBot:
             return True, f"mirrored={mirrored}, failed={failed}"
         return True, "ok"
 
+    async def _publish_pages(self) -> tuple[bool, str]:
+        cmd = (self.settings.publish_pages_command or "").strip()
+        if not cmd:
+            return False, "publish_command_missing"
+
+        parsed = command_to_args(os.path.expandvars(cmd))
+        if not parsed:
+            return False, "publish_command_empty"
+        # .cmd/.bat requires cmd /c when shell=False.
+        if len(parsed) == 1 and parsed[0].lower().endswith((".cmd", ".bat")):
+            args = ["cmd", "/c", parsed[0]]
+        else:
+            args = parsed
+
+        try:
+            proc = await asyncio.to_thread(self._run_cmd_capture, args, 420)
+        except Exception as exc:
+            return False, str(exc)
+
+        if proc.returncode != 0:
+            tail = ((proc.stderr or proc.stdout or "").strip().splitlines() or [f"returncode={proc.returncode}"])[-1]
+            return False, tail[:240]
+        return True, "ok"
+
     @staticmethod
     def _is_favorite_item(name: str, source: str) -> bool:
         src = (source or "").lower()
@@ -598,10 +622,24 @@ class VkusvillGroupBot:
         if ok:
             await update.message.reply_text(
                 f"Кэш картинок обновлен за {day}: {detail}.\n"
-                "Чтобы это увидели все в Mini App, нужно запушить изменения на GitHub Pages."
+                "Чтобы это увидели все в Mini App, запусти /publishapp."
             )
             return
         await update.message.reply_text(f"Кэш картинок не обновлен: {detail}")
+
+    async def publishapp(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        ok, detail = await self._publish_pages()
+        self.store.set_meta("last_publish_at", self._now_iso())
+        self.store.set_meta("last_publish_status", "ok" if ok else "error")
+        self.store.set_meta("last_publish_detail", detail)
+        if ok:
+            await update.message.reply_text("Mini App опубликован на GitHub Pages.")
+            return
+        await update.message.reply_text(f"Публикация Mini App не удалась: {detail}")
 
     async def where(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -723,13 +761,20 @@ class VkusvillGroupBot:
         self.store.set_meta("last_mirror_at", self._now_iso())
         self.store.set_meta("last_mirror_status", "ok" if mirror_ok else "error")
         self.store.set_meta("last_mirror_detail", mirror_detail)
+        publish_suffix = ""
+        if mirror_ok and self.settings.auto_publish_pages:
+            publish_ok, publish_detail = await self._publish_pages()
+            self.store.set_meta("last_publish_at", self._now_iso())
+            self.store.set_meta("last_publish_status", "ok" if publish_ok else "error")
+            self.store.set_meta("last_publish_detail", publish_detail)
+            publish_suffix = f" Публикация Pages: {publish_detail}."
         await self._send(
             app,
             (
                 f"Сбор {now.strftime('%H:%M')} завершен. "
                 f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
                 f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}. "
-                f"Кэш картинок: {mirror_detail}."
+                f"Кэш картинок: {mirror_detail}.{publish_suffix}"
             ),
             reply_markup=self._open_showcase_markup(),
         )
@@ -1504,6 +1549,9 @@ class VkusvillGroupBot:
         last_mirror_at = self.store.get_meta("last_mirror_at") or "n/a"
         last_mirror_status = self.store.get_meta("last_mirror_status") or "n/a"
         last_mirror_detail = self.store.get_meta("last_mirror_detail") or "n/a"
+        last_publish_at = self.store.get_meta("last_publish_at") or "n/a"
+        last_publish_status = self.store.get_meta("last_publish_status") or "n/a"
+        last_publish_detail = self.store.get_meta("last_publish_detail") or "n/a"
 
         problems: list[str] = []
         if bound_chat is None:
@@ -1535,6 +1583,7 @@ class VkusvillGroupBot:
             f"- last_collect: status={last_collect_status}, at={last_collect_at}",
             f"- last_sessioncheck: status={last_sessioncheck_status}, at={last_sessioncheck_at}",
             f"- last_mirror: status={last_mirror_status}, at={last_mirror_at}, detail={last_mirror_detail}",
+            f"- last_publish: status={last_publish_status}, at={last_publish_at}, detail={last_publish_detail}",
             f"- last_executor: status={last_executor_status}, at={last_executor_at}, ok_count={last_executor_ok}/{last_executor_total}",
         ]
         if problems:
@@ -1552,6 +1601,7 @@ class VkusvillGroupBot:
             "/bind - привязать текущий чат (owner)\n"
             "/collect - обновить скидки из ВкусВилл (owner)\n"
             "/mirror [YYYY-MM-DD] - собрать локальный кэш картинок (owner)\n"
+            "/publishapp - опубликовать Mini App на GitHub Pages (owner)\n"
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
@@ -1588,6 +1638,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("bind", self.bind))
         app.add_handler(CommandHandler("collect", self.collect))
         app.add_handler(CommandHandler("mirror", self.mirror))
+        app.add_handler(CommandHandler("publishapp", self.publishapp))
         app.add_handler(CommandHandler("setowner", self.setowner))
         app.add_handler(CommandHandler("where", self.where))
         app.add_handler(CommandHandler("selftest", self.selftest))
