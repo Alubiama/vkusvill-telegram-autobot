@@ -603,7 +603,26 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
               (el.querySelector('img') || {}).getAttribute?.('data-src') ||
               ''
             );
-            rows.push({ xmlid, name, priceNew, priceOld, image, text: norm(el.innerText || '') });
+            const addBtn =
+              el.querySelector('.js-delivery__basket--add') ||
+              el.querySelector('button[class*="basket"]') ||
+              el.querySelector('[class*="basket"][role="button"]');
+            const plusBtn =
+              el.querySelector('.Q_Up') ||
+              el.querySelector('.js-delivery__product__q-btn.Q_Up');
+            rows.push({
+              xmlid,
+              name,
+              priceNew,
+              priceOld,
+              image,
+              text: norm(el.innerText || ''),
+              addText: norm((addBtn || {}).innerText || (addBtn || {}).getAttribute?.('aria-label') || ''),
+              addClass: norm((addBtn || {}).className || ''),
+              plusClass: norm((plusBtn || {}).className || ''),
+              hasAddButton: !!addBtn,
+              hasPlusButton: !!plusBtn,
+            });
           }
           return rows;
         }
@@ -612,6 +631,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
 
     items: list[DiscountItem] = []
     seen: set[str] = set()
+    skipped_unavailable = 0
     for row in raw:
         xmlid = str(row.get("xmlid") or "").strip()
         name = str(row.get("name") or "").strip()
@@ -620,6 +640,43 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
         row_text = _normalize_ws(str(row.get("text") or "")).lower()
         loyalty_markers = ("по карте", "скидка по карте", "лояльности")
         if not any(marker in row_text for marker in loyalty_markers):
+            continue
+
+        add_text = _normalize_ws(str(row.get("addText") or "")).lower()
+        add_class = _normalize_ws(str(row.get("addClass") or "")).lower()
+        plus_class = _normalize_ws(str(row.get("plusClass") or "")).lower()
+        has_add_button = bool(row.get("hasAddButton"))
+        has_plus_button = bool(row.get("hasPlusButton"))
+        unavailable_markers = (
+            "нет в наличии",
+            "нет вналичии",
+            "раскупили",
+            "закончил",
+            "закончилось",
+            "закончился",
+            "скоро появ",
+            "недоступ",
+            "нет товара",
+        )
+        tomorrow_markers = (
+            "завтра",
+            "доставить завтра",
+            "only online add",
+            "only-online-add",
+            "tomorrow",
+        )
+        looks_unavailable = any(marker in row_text for marker in unavailable_markers) or any(
+            marker in add_text for marker in unavailable_markers
+        )
+        requires_tomorrow = (
+            any(marker in row_text for marker in tomorrow_markers)
+            or any(marker in add_text for marker in tomorrow_markers)
+            or any(marker in add_class for marker in tomorrow_markers)
+            or any(marker in plus_class for marker in tomorrow_markers)
+        )
+        has_action = has_add_button or has_plus_button
+        if looks_unavailable or requires_tomorrow or not has_action:
+            skipped_unavailable += 1
             continue
 
         prices = RUB_RE.findall(f"{row.get('priceNew') or ''} {row.get('priceOld') or ''} {row.get('text') or ''}")
@@ -653,6 +710,8 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
         )
         if max_items > 0 and len(items) >= max_items:
             break
+    if skipped_unavailable:
+        _log(f"[collector] offers ready food: skipped unavailable={skipped_unavailable}")
     return items
 
 

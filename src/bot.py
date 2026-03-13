@@ -60,6 +60,56 @@ class VkusvillGroupBot:
         raw = "|".join(sorted(str(x.item_id) for x in items))
         return hashlib.sha1(f"{day}|{raw}".encode("utf-8")).hexdigest()[:12]
 
+    def _best_available_items(self, day: str, restore_into_live: bool = False) -> tuple[list[object], str]:
+        live_items = self.store.list_items(day)
+        best_snapshot = self.store.get_best_day_snapshot(day)
+        if best_snapshot is None or not best_snapshot.items:
+            return live_items, "live"
+
+        live_regular = self._regular_inshop_count(live_items)
+        best_regular = int(best_snapshot.regular_count)
+        use_snapshot = (
+            not live_items
+            or best_regular > live_regular
+            or (best_regular == live_regular and best_snapshot.total_items > len(live_items))
+        )
+        if not use_snapshot:
+            return live_items, "live"
+
+        if restore_into_live:
+            self.store.upsert_items(day, best_snapshot.items)
+            self.store.set_meta("last_snapshot_restore_at", self._now_iso())
+            self.store.set_meta("last_snapshot_restore_day", day)
+            self.store.set_meta("last_snapshot_restore_id", best_snapshot.snapshot_id)
+            self.store.set_meta("last_snapshot_restore_status", best_snapshot.status)
+        return list(best_snapshot.items), f"snapshot:{best_snapshot.snapshot_id}"
+
+    def _archive_day_snapshot(self, day: str, items: list[object], status: str) -> str | None:
+        if not items:
+            return None
+        snapshot_id = self._snapshot_id(items, day)
+        rows = [x.to_row() if hasattr(x, "to_row") else x for x in items]
+        saved = self.store.save_day_snapshot(
+            day=day,
+            snapshot_id=snapshot_id,
+            items=rows,
+            regular_count=self._regular_inshop_count(items),
+            status=status,
+            created_at=self._now_iso(),
+        )
+        self.store.set_meta("last_day_snapshot_id", snapshot_id)
+        self.store.set_meta("last_day_snapshot_day", day)
+        self.store.set_meta("last_day_snapshot_status", status)
+        self.store.set_meta("last_day_snapshot_saved_new", "true" if saved else "false")
+        best = self.store.get_best_day_snapshot(day)
+        if best is not None:
+            self.store.set_meta("best_day_snapshot_id", best.snapshot_id)
+            self.store.set_meta("best_day_snapshot_day", best.day)
+            self.store.set_meta("best_day_snapshot_regular_count", str(best.regular_count))
+            self.store.set_meta("best_day_snapshot_total_items", str(best.total_items))
+            self.store.set_meta("best_day_snapshot_status", best.status)
+        return snapshot_id
+
     def _get_chat_id(self) -> int | None:
         if self.settings.chat_id is not None:
             return self.settings.chat_id
@@ -613,7 +663,7 @@ class VkusvillGroupBot:
             return None
 
         day = self._today()
-        items = self.store.list_items(day)
+        items, _snapshot_source = self._best_available_items(day)
         if not items:
             return self.settings.mini_app_url
 
@@ -886,7 +936,7 @@ class VkusvillGroupBot:
             return
 
         day = self._today()
-        items = self.store.list_items(day)
+        items, snapshot_source = self._best_available_items(day)
         regular_count = self._regular_inshop_count(items)
         favorite_count = sum(1 for x in items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in items if self._is_ready_food_offer(x.source))
@@ -902,6 +952,7 @@ class VkusvillGroupBot:
             f"- inshop_regular: {regular_count}/18",
             f"- favorite: {favorite_count}",
             f"- ready_food: {ready_food_count}",
+            f"- source_for_app: {snapshot_source}",
         ]
         await update.message.reply_text("\n".join(lines))
 
@@ -976,6 +1027,7 @@ class VkusvillGroupBot:
         if existing_regular_count >= 18 and fetched_regular_count < 18:
             existing_favorite_count = sum(1 for x in existing if self._is_favorite_item(x.name, x.source))
             existing_ready_food_count = sum(1 for x in existing if self._is_ready_food_offer(x.source))
+            archived_snapshot_id = self._archive_day_snapshot(day, existing, "guard_preserve_full")
             self.store.set_meta("last_collect_at", self._now_iso())
             self.store.set_meta("last_collect_status", "guard_preserve_full")
             self.store.set_meta("last_collect_day", day)
@@ -987,7 +1039,8 @@ class VkusvillGroupBot:
                     (
                         f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
                         f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
-                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count}). "
+                        f"Снэпшот: {archived_snapshot_id or 'n/a'}."
                     ),
                 )
             else:
@@ -996,7 +1049,8 @@ class VkusvillGroupBot:
                     (
                         f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
                         f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
-                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count}). "
+                        f"Снэпшот: {archived_snapshot_id or 'n/a'}."
                     ),
                 )
             return True
@@ -1010,6 +1064,7 @@ class VkusvillGroupBot:
             regular_count = self._regular_inshop_count(all_items)
             favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
             ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
+            archived_snapshot_id = self._archive_day_snapshot(day, all_items, "guard_keep_richer_snapshot")
             self.store.set_meta("last_collect_at", self._now_iso())
             self.store.set_meta("last_collect_status", "guard_keep_richer_snapshot")
             self.store.set_meta("last_collect_day", day)
@@ -1028,6 +1083,7 @@ class VkusvillGroupBot:
                     "Сработала защита от деградации подборок.\n"
                     f"Новый срез: {fetched_regular_count}/18, оставлен более полный: {existing_regular_count}/18.\n"
                     f"Итог в базе: {len(all_items)} (любимый: {favorite_count}, готовая еда: {ready_food_count}).\n"
+                    f"Резервный снэпшот: {archived_snapshot_id or 'n/a'}.\n"
                     f"Попытки: {self._format_collect_attempts(collect_meta.get('attempts') or [])}"
                 ),
             )
@@ -1038,6 +1094,7 @@ class VkusvillGroupBot:
         regular_count = self._regular_inshop_count(all_items)
         favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
+        archived_snapshot_id = self._archive_day_snapshot(day, all_items, "ok")
         try:
             self._write_webapp_latest_snapshot(day, all_items)
         except Exception as exc:
@@ -1071,7 +1128,8 @@ class VkusvillGroupBot:
             f"Сбор {now.strftime('%H:%M')} завершен. "
             f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
             f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}. "
-            f"Кэш картинок: {mirror_detail}.{publish_suffix}"
+            f"Кэш картинок: {mirror_detail}. "
+            f"Снэпшот: {archived_snapshot_id or 'n/a'}.{publish_suffix}"
         )
         await self._send_owner(app, summary_text)
         if bool(collect_meta.get("used_failover")):
@@ -1121,7 +1179,7 @@ class VkusvillGroupBot:
                 await update.message.reply_text("Старая витрина отключена. Открой Mini App через /app в личке.")
             return
         day = self._today()
-        items = self.store.list_items(day)
+        items, _snapshot_source = self._best_available_items(day, restore_into_live=True)
         if not items:
             await update.message.reply_text(
                 f"Товары обновляются автоматически по расписанию: {self._collection_schedule_text()} (Europe/Moscow)."
@@ -1259,7 +1317,7 @@ class VkusvillGroupBot:
         day = self._today()
         user_id = update.effective_user.id
         user_name = update.effective_user.full_name
-        items = self.store.list_items(day)
+        items, _snapshot_source = self._best_available_items(day, restore_into_live=True)
         items_by_id = {x.item_id: x for x in items}
         snapshot_id = self._snapshot_id(items, day)
 
@@ -1349,14 +1407,19 @@ class VkusvillGroupBot:
                 )
             else:
                 msg = f"Сохранено: {selected_positive} товаров (обновлено {touched})."
+            if selected_positive == 0:
+                msg = "Выбор очищен. Сейчас у тебя нет активных товаров."
             if selected_preview:
                 msg = f"{msg}\nТвой выбор:\n{selected_preview}"
             await update.message.reply_text(msg)
             bound_chat_id = self._get_chat_id()
             current_chat = update.effective_chat.id if update.effective_chat else None
             if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
-                group_msg = f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched})."
-                if selected_preview:
+                if selected_positive == 0:
+                    group_msg = f"{user_name}: выбор очищен."
+                else:
+                    group_msg = f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched})."
+                if selected_preview and selected_positive > 0:
                     group_msg = f"{group_msg}\nВыбор:\n{selected_preview}"
                 await self._send(
                     context.application,
@@ -1388,7 +1451,7 @@ class VkusvillGroupBot:
             return
 
         day = self._today()
-        items = self.store.list_items(day)
+        items, _snapshot_source = self._best_available_items(day, restore_into_live=True)
         if not items:
             await query.edit_message_text(
                 f"Скидок пока нет. Автообновление: {self._collection_schedule_text()} (Europe/Moscow)."
@@ -1596,7 +1659,8 @@ class VkusvillGroupBot:
 
     def _schedule_startup_collect_if_needed(self, app: Application) -> None:
         day = self._today()
-        if self.store.list_items(day):
+        items, _snapshot_source = self._best_available_items(day)
+        if items:
             return
         if not self.settings.collection_times:
             return
@@ -1661,11 +1725,11 @@ class VkusvillGroupBot:
             self.store.clear_votes(day)
             await self._send(app, "Выборы за текущий день сброшены. Можно собирать новый заказ с нуля.")
         else:
-            await self._send(
+            await self._send_owner(
                 app,
                 (
-                    "Выборы НЕ очищены: автооформление не завершилось успешно. "
-                    f"Резерв: {backup_path}"
+                    "Выборы НЕ очищены: автооформление не завершилось успешно.\n"
+                    f"Резерв голосов: {backup_path}"
                 ),
             )
 
@@ -1675,7 +1739,6 @@ class VkusvillGroupBot:
             self.store.set_meta("last_executor_status", "dry_run_skip")
             return {"ok": True, "status": "dry_run_skip"}
         if not self.settings.order_executor_command:
-            await self._send(app, "Автооформление пропущено. Детали отправлены владельцу.")
             await self._send_owner(app, "ORDER_EXECUTOR_COMMAND не задан. Автооформление пропущено.")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "missing_command")
@@ -1683,7 +1746,6 @@ class VkusvillGroupBot:
 
         args = self._build_command_args(self.settings.order_executor_command, out_path)
         if not args:
-            await self._send(app, "Автооформление пропущено. Детали отправлены владельцу.")
             await self._send_owner(app, "ORDER_EXECUTOR_COMMAND пустой после разбора. Автооформление пропущено.")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "empty_command")
@@ -1721,10 +1783,6 @@ class VkusvillGroupBot:
                 )
                 if not refresh_ok:
                     short = (refresh_raw or "session_check_failed").splitlines()[-1][:240]
-                    await self._send(
-                        app,
-                        "Автооформление остановлено: не удалось подтвердить сессию ВкусВилл. Детали у владельца.",
-                    )
                     await self._send_owner(
                         app,
                         f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({self._repair_mojibake(short)}).",
@@ -1756,7 +1814,6 @@ class VkusvillGroupBot:
             if isinstance(payload, dict):
                 if payload.get("error"):
                     err_short = str(payload.get("error") or "").strip().splitlines()[0][:220]
-                    await self._send(app, "Автодобавление не сработало. Детали отправлены владельцу.")
                     await self._send_owner(
                         app,
                         f"Автодобавление не сработало: {self._repair_mojibake(err_short)}\nТехлог: {log_path}",
@@ -1772,7 +1829,6 @@ class VkusvillGroupBot:
                     if msg == "no_selected_items":
                         await self._send(app, "В заказе нет выбранных позиций.")
                     else:
-                        await self._send(app, "Корзина обновлена.")
                         await self._send_owner(app, f"Executor success_no_targets. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "success_no_targets")
@@ -1838,7 +1894,6 @@ class VkusvillGroupBot:
                     if cart_unique > 0:
                         lines.append(f"В корзине сейчас: {cart_unique} позиций, суммарное кол-во: {cart_total_qty}.")
                     lines.append(f"Техлог: {log_path}")
-                    await self._send(app, f"Корзина обновлена частично: {ok_count}/{total}. Детали отправлены владельцу.")
                     await self._send_owner(app, "\n".join(lines))
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "partial")
@@ -1847,19 +1902,16 @@ class VkusvillGroupBot:
                     return {"ok": False, "status": "partial", "log_path": str(log_path)}
             else:
                 if proc.returncode == 0:
-                    await self._send(app, "Корзина обновлена.")
                     await self._send_owner(app, f"Executor success_no_payload. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "success_no_payload")
                     return {"ok": True, "status": "success_no_payload", "log_path": str(log_path)}
                 else:
-                    await self._send(app, "Автодобавление не сработало. Детали отправлены владельцу.")
                     await self._send_owner(app, f"Executor failed_no_payload. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "failed_no_payload")
                     return {"ok": False, "status": "failed_no_payload", "log_path": str(log_path)}
         except Exception as exc:
-            await self._send(app, "Автодобавление завершилось ошибкой. Детали отправлены владельцу.")
             await self._send_owner(app, f"Executor FAILED: {self._repair_mojibake(str(exc))}")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "exception")
@@ -1875,7 +1927,7 @@ class VkusvillGroupBot:
             return
 
         day = self._today()
-        items = self.store.list_items(day)
+        items, snapshot_source = self._best_available_items(day)
         regular_count = self._regular_inshop_count(items)
         favorite_count = sum(1 for x in items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in items if self._is_ready_food_offer(x.source))
@@ -1901,6 +1953,12 @@ class VkusvillGroupBot:
         last_publish_at = self.store.get_meta("last_publish_at") or "n/a"
         last_publish_status = self.store.get_meta("last_publish_status") or "n/a"
         last_publish_detail = self.store.get_meta("last_publish_detail") or "n/a"
+        best_snapshot = self.store.get_best_day_snapshot(day)
+        best_snapshot_text = (
+            f"{best_snapshot.snapshot_id} ({best_snapshot.regular_count}/18, total={best_snapshot.total_items}, {best_snapshot.status})"
+            if best_snapshot is not None
+            else "n/a"
+        )
 
         problems: list[str] = []
         if bound_chat is None:
@@ -1928,12 +1986,14 @@ class VkusvillGroupBot:
             f"- provider: {self.settings.provider}",
             f"- dry_run: {self.settings.dry_run}",
             f"- items: total={len(items)}, regular={regular_count}/18, favorite={favorite_count}, ready_food={ready_food_count}",
+            f"- source_for_app: {snapshot_source}",
             f"- votes: users={len(users)}, selected_positions={active_votes}",
             f"- last_collect: status={last_collect_status}, at={last_collect_at}",
             f"- last_sessioncheck: status={last_sessioncheck_status}, at={last_sessioncheck_at}",
             f"- last_mirror: status={last_mirror_status}, at={last_mirror_at}, detail={last_mirror_detail}",
             f"- last_publish: status={last_publish_status}, at={last_publish_at}, detail={last_publish_detail}",
             f"- last_executor: status={last_executor_status}, at={last_executor_at}, ok_count={last_executor_ok}/{last_executor_total}",
+            f"- best_snapshot: {best_snapshot_text}",
         ]
         if problems:
             lines.append("- issues:")

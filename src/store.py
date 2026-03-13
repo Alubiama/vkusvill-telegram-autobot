@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,17 @@ class ItemRow:
     discount_price: float
     source: str
     image_url: str
+
+
+@dataclass
+class DaySnapshot:
+    day: str
+    snapshot_id: str
+    created_at: str
+    regular_count: int
+    total_items: int
+    status: str
+    items: list[ItemRow]
 
 
 class StateStore:
@@ -65,6 +77,20 @@ class StateStore:
                 CREATE TABLE IF NOT EXISTS meta (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS day_snapshots (
+                    day TEXT NOT NULL,
+                    snapshot_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    regular_count INTEGER NOT NULL,
+                    total_items INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT '',
+                    items_json TEXT NOT NULL,
+                    PRIMARY KEY(day, snapshot_id)
                 )
                 """
             )
@@ -221,3 +247,101 @@ class StateStore:
     def clear_votes(self, day: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM votes WHERE day = ?", (day,))
+
+    @staticmethod
+    def _serialize_items(items: list[ItemRow]) -> str:
+        return json.dumps(
+            [
+                {
+                    "item_id": item.item_id,
+                    "name": item.name,
+                    "price": float(item.price),
+                    "discount_price": float(item.discount_price),
+                    "source": item.source,
+                    "image_url": item.image_url,
+                }
+                for item in items
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _deserialize_items(raw: str) -> list[ItemRow]:
+        try:
+            payload = json.loads(raw or "[]")
+        except json.JSONDecodeError:
+            return []
+        out: list[ItemRow] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            out.append(
+                ItemRow(
+                    item_id=str(item.get("item_id") or ""),
+                    name=str(item.get("name") or ""),
+                    price=float(item.get("price") or 0),
+                    discount_price=float(item.get("discount_price") or item.get("price") or 0),
+                    source=str(item.get("source") or ""),
+                    image_url=str(item.get("image_url") or ""),
+                )
+            )
+        return [item for item in out if item.item_id]
+
+    def save_day_snapshot(
+        self,
+        day: str,
+        snapshot_id: str,
+        items: list[ItemRow],
+        regular_count: int,
+        status: str,
+        created_at: str | None = None,
+    ) -> bool:
+        if not items:
+            return False
+        created = created_at or datetime.utcnow().isoformat()
+        with self._connect() as conn:
+            before = conn.total_changes
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO day_snapshots(
+                    day, snapshot_id, created_at, regular_count, total_items, status, items_json
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    day,
+                    snapshot_id,
+                    created,
+                    int(regular_count),
+                    len(items),
+                    status,
+                    self._serialize_items(items),
+                ),
+            )
+            return conn.total_changes > before
+
+    def get_best_day_snapshot(self, day: str) -> DaySnapshot | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT day, snapshot_id, created_at, regular_count, total_items, status, items_json
+                FROM day_snapshots
+                WHERE day = ?
+                ORDER BY regular_count DESC, total_items DESC, created_at DESC
+                LIMIT 1
+                """,
+                (day,),
+            ).fetchone()
+        if not row:
+            return None
+        items = self._deserialize_items(str(row["items_json"]))
+        return DaySnapshot(
+            day=str(row["day"]),
+            snapshot_id=str(row["snapshot_id"]),
+            created_at=str(row["created_at"]),
+            regular_count=int(row["regular_count"]),
+            total_items=int(row["total_items"]),
+            status=str(row["status"]),
+            items=items,
+        )

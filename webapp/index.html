@@ -265,7 +265,7 @@
     }
     .actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1.2fr 1fr 1fr;
       gap: 8px;
       position: sticky;
       bottom: 0;
@@ -388,6 +388,7 @@
 
     <section class="actions">
       <button class="action-btn primary" id="sendAllBtn" type="button">Отправить выбор</button>
+      <button class="action-btn" id="clearAllBtn" type="button">Снять всё</button>
       <button class="action-btn" id="closeBtn" type="button">Закрыть</button>
     </section>
     <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
@@ -745,6 +746,16 @@
       updateSummary();
     }
 
+    function clearAllSelection() {
+      for (const item of allRealItems) {
+        if (!item?.item_id) continue;
+        selected[item.item_id] = 0;
+      }
+      renderGroup();
+      updateSummary();
+      setSendState("Выбор очищен. Нажми «Отправить выбор», чтобы бот сохранил отмену.", "ok");
+    }
+
     function renderTabs() {
       const root = document.getElementById("tabs");
       root.innerHTML = "";
@@ -988,6 +999,7 @@
     }
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);
+    document.getElementById("clearAllBtn").addEventListener("click", clearAllSelection);
     document.getElementById("closeBtn").addEventListener("click", () => tg?.close());
     document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
     document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
