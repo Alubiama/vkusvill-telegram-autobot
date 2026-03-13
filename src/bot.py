@@ -636,12 +636,19 @@ class VkusvillGroupBot:
             "d": day,
             "sid": snapshot_id,
             "m": [
-                [
+                (
+                    [
                     str(item.item_id),
                     str(item.name),
                     float(item.discount_price),
                     self._compact_image_url_for_webapp(str(getattr(item, "image_url", "") or "")),
-                ]
+                    ]
+                    + (
+                        [int(getattr(item, "stock_qty"))]
+                        if getattr(item, "stock_qty", None) is not None
+                        else []
+                    )
+                )
                 for item in unique_items
             ],
             "g": group_indexes,
@@ -715,12 +722,19 @@ class VkusvillGroupBot:
             "d": day,
             "sid": snapshot_id,
             "m": [
-                [
+                (
+                    [
                     str(item.item_id),
                     str(item.name),
                     float(item.discount_price),
                     _compact_image_url(str(getattr(item, "image_url", "") or "")),
-                ]
+                    ]
+                    + (
+                        [int(getattr(item, "stock_qty"))]
+                        if getattr(item, "stock_qty", None) is not None
+                        else []
+                    )
+                )
                 for item in unique_items
             ],
             "g": group_indexes,
@@ -751,7 +765,14 @@ class VkusvillGroupBot:
         # Safety fallback: if URL gets too long, drop image URLs and keep text mode stable.
         if len(out_url) > 7000:
             compact_payload["m"] = [
-                [str(item.item_id), str(item.name), float(item.discount_price)]
+                (
+                    [str(item.item_id), str(item.name), float(item.discount_price), ""]
+                    + (
+                        [int(getattr(item, "stock_qty"))]
+                        if getattr(item, "stock_qty", None) is not None
+                        else []
+                    )
+                )
                 for item in unique_items
             ]
             query["data"] = _pack(compact_payload)

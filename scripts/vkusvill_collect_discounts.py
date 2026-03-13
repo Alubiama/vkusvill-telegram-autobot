@@ -15,6 +15,7 @@ from playwright.sync_api import sync_playwright
 
 
 RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:₽|руб|в‚Ѕ|СЂСѓР±)", re.IGNORECASE)
+STOCK_QTY_RE = re.compile(r"(?:в\s*наличии|осталось)\s*[:\\-]?\s*(\d{1,4})\s*шт", re.IGNORECASE)
 
 
 @dataclass
@@ -25,6 +26,7 @@ class DiscountItem:
     discount_price: float
     source: str
     image_url: str = ""
+    stock_qty: int | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -34,6 +36,7 @@ class DiscountItem:
             "discount_price": self.discount_price,
             "source": self.source,
             "image_url": self.image_url,
+            "stock_qty": self.stock_qty,
         }
 
 
@@ -45,6 +48,20 @@ def _normalize_ws(value: str) -> str:
 def _parse_price(token: str) -> float:
     normalized = token.replace(" ", "").replace(",", ".")
     return float(normalized)
+
+
+def _extract_stock_qty(text: str) -> int | None:
+    if not text:
+        return None
+    normalized = _normalize_ws(text).lower()
+    match = STOCK_QTY_RE.search(normalized)
+    if not match:
+        return None
+    try:
+        value = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def _item_id(name: str) -> str:
@@ -357,6 +374,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite" if is_favorite else source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
+                stock_qty=_extract_stock_qty(text),
             )
         )
 
@@ -434,6 +452,7 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
+                stock_qty=_extract_stock_qty(text),
             )
         )
 
@@ -507,6 +526,7 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite",
                 image_url=_normalize_image_url(str(card.get("image") or "")),
+                stock_qty=_extract_stock_qty(text),
             )
         )
         break
@@ -706,6 +726,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
                 discount_price=discount,
                 source="vkusvill_offers_ready_food",
                 image_url=_normalize_image_url(str(row.get("image") or "")),
+                stock_qty=_extract_stock_qty(str(row.get("text") or "")),
             )
         )
         if max_items > 0 and len(items) >= max_items:

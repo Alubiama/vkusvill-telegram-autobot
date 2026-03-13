@@ -235,6 +235,35 @@
     .price-label { font-size: 10px; color: var(--muted); margin-bottom: 1px; }
     .price-val { font-size: 17px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
     .discount { color: var(--ok); }
+    .stock-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .stock-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #b7dbc4;
+      background: #f2fbf4;
+      color: #206243;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 5px 8px;
+      white-space: nowrap;
+    }
+    .stock-badge.low {
+      border-color: #ebcf9f;
+      background: #fff7ea;
+      color: #8b5b13;
+    }
+    .stock-badge.critical {
+      border-color: #efc4bb;
+      background: #fff1ef;
+      color: #963c32;
+    }
     .toggle {
       width: 100%;
       border: 1px solid var(--line);
@@ -395,7 +424,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260313-resilience1";
+    const BUILD_ID = "b-20260313-stock1";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -433,6 +462,14 @@
       }
     }
 
+    function maybeInt(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      const whole = Math.trunc(num);
+      return whole >= 0 ? whole : null;
+    }
+
     function unpackItem(x) {
       return {
         item_id: String(x?.i || x?.item_id || ""),
@@ -441,6 +478,7 @@
         discount_price: Number(x?.d ?? x?.discount_price ?? 0),
         source: String(x?.s || x?.source || ""),
         image_url: String(x?.u || x?.image_url || ""),
+        stock_qty: maybeInt(x?.q ?? x?.stock_qty),
       };
     }
 
@@ -611,6 +649,7 @@
           discount_price: Number(row[2] || 0),
           source: "",
           image_url: expandImageUrl(row[3]),
+          stock_qty: maybeInt(row[4]),
         };
       };
       groups = [0, 1, 2].map((idx) => {
@@ -704,6 +743,14 @@
       if (!Number.isFinite(n)) return "--";
       const text = Number.isInteger(n) ? String(n) : n.toFixed(2);
       return `${text} ₽`;
+    }
+
+    function stockBadgeState(value) {
+      const qty = maybeInt(value);
+      if (qty === null) return null;
+      if (qty <= 3) return "critical";
+      if (qty <= 8) return "low";
+      return "ok";
     }
 
     function selectedCount() {
@@ -866,6 +913,19 @@
         </div>
       `;
       main.appendChild(prices);
+
+      const stockQty = maybeInt(item.stock_qty);
+      if (stockQty !== null) {
+        const stockRow = document.createElement("div");
+        stockRow.className = "stock-row";
+        const stock = document.createElement("span");
+        const state = stockBadgeState(stockQty);
+        stock.className = `stock-badge${state && state !== "ok" ? ` ${state}` : ""}`;
+        stock.textContent = `Осталось: ${stockQty} шт`;
+        stockRow.appendChild(stock);
+        main.appendChild(stockRow);
+      }
+
       head.appendChild(main);
       wrap.appendChild(head);
 

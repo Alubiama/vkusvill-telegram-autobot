@@ -15,6 +15,7 @@ class ItemRow:
     discount_price: float
     source: str
     image_url: str
+    stock_qty: int | None = None
 
 
 @dataclass
@@ -51,6 +52,7 @@ class StateStore:
                     discount_price REAL NOT NULL,
                     source TEXT NOT NULL,
                     image_url TEXT NOT NULL DEFAULT '',
+                    stock_qty INTEGER,
                     PRIMARY KEY(day, item_id)
                 )
                 """
@@ -72,6 +74,8 @@ class StateStore:
             cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(items)").fetchall()}
             if "image_url" not in cols:
                 conn.execute("ALTER TABLE items ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
+            if "stock_qty" not in cols:
+                conn.execute("ALTER TABLE items ADD COLUMN stock_qty INTEGER")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS meta (
@@ -114,16 +118,26 @@ class StateStore:
             for item in items:
                 conn.execute(
                     """
-                    INSERT INTO items(day, item_id, name, price, discount_price, source, image_url)
-                    VALUES(?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO items(day, item_id, name, price, discount_price, source, image_url, stock_qty)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(day, item_id) DO UPDATE SET
                       name=excluded.name,
                       price=excluded.price,
                       discount_price=excluded.discount_price,
                       source=excluded.source,
-                      image_url=excluded.image_url
+                      image_url=excluded.image_url,
+                      stock_qty=excluded.stock_qty
                     """,
-                    (day, item.item_id, item.name, item.price, item.discount_price, item.source, item.image_url),
+                    (
+                        day,
+                        item.item_id,
+                        item.name,
+                        item.price,
+                        item.discount_price,
+                        item.source,
+                        item.image_url,
+                        item.stock_qty,
+                    ),
                 )
                 if item.item_id not in existing_ids:
                     fresh.append(item)
@@ -143,16 +157,26 @@ class StateStore:
                 new_ids.append(item.item_id)
                 conn.execute(
                     """
-                    INSERT INTO items(day, item_id, name, price, discount_price, source, image_url)
-                    VALUES(?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO items(day, item_id, name, price, discount_price, source, image_url, stock_qty)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(day, item_id) DO UPDATE SET
                       name=excluded.name,
                       price=excluded.price,
                       discount_price=excluded.discount_price,
                       source=excluded.source,
-                      image_url=excluded.image_url
+                      image_url=excluded.image_url,
+                      stock_qty=excluded.stock_qty
                     """,
-                    (day, item.item_id, item.name, item.price, item.discount_price, item.source, item.image_url),
+                    (
+                        day,
+                        item.item_id,
+                        item.name,
+                        item.price,
+                        item.discount_price,
+                        item.source,
+                        item.image_url,
+                        item.stock_qty,
+                    ),
                 )
                 if item.item_id not in existing_ids:
                     fresh.append(item)
@@ -177,7 +201,7 @@ class StateStore:
     def list_items(self, day: str) -> list[ItemRow]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT item_id, name, price, discount_price, source, image_url FROM items WHERE day = ? ORDER BY rowid",
+                "SELECT item_id, name, price, discount_price, source, image_url, stock_qty FROM items WHERE day = ? ORDER BY rowid",
                 (day,),
             ).fetchall()
         return [ItemRow(**dict(row)) for row in rows]
@@ -259,6 +283,7 @@ class StateStore:
                     "discount_price": float(item.discount_price),
                     "source": item.source,
                     "image_url": item.image_url,
+                    "stock_qty": int(item.stock_qty) if item.stock_qty is not None else None,
                 }
                 for item in items
             ],
@@ -284,6 +309,11 @@ class StateStore:
                     discount_price=float(item.get("discount_price") or item.get("price") or 0),
                     source=str(item.get("source") or ""),
                     image_url=str(item.get("image_url") or ""),
+                    stock_qty=(
+                        int(item.get("stock_qty"))
+                        if item.get("stock_qty") not in (None, "")
+                        else None
+                    ),
                 )
             )
         return [item for item in out if item.item_id]
