@@ -562,6 +562,7 @@
         source: String(x?.s || x?.source || ""),
         image_url: String(x?.u || x?.image_url || ""),
         stock_qty: maybeInt(x?.q ?? x?.stock_qty),
+        group_qty: maybeInt(x?.gt ?? x?.group_qty) || 0,
       };
     }
 
@@ -694,6 +695,12 @@
     const compactGroups = Array.isArray(payload.g) ? payload.g : [];
     const compactFavorite = Array.isArray(payload.f) ? payload.f : [];
     const compactReadyFood = Array.isArray(payload.r) ? payload.r : [];
+    const compactGroupTotals = Array.isArray(payload.gt) ? payload.gt : [];
+    const compactGroupTotalsByIndex = new Map(
+      compactGroupTotals
+        .filter((row) => Array.isArray(row) && row.length >= 2)
+        .map((row) => [Number(row[0]), Number(row[1] || 0)]),
+    );
 
     function fallbackGroupsFromItems(items) {
       const favorites = [];
@@ -733,6 +740,7 @@
           source: "",
           image_url: expandImageUrl(row[3]),
           stock_qty: maybeInt(row[4]),
+          group_qty: Number(compactGroupTotalsByIndex.get(Number(idx)) || 0),
         };
       };
       groups = [0, 1, 2].map((idx) => {
@@ -1093,14 +1101,23 @@
       main.appendChild(prices);
 
       const stockQty = maybeInt(item.stock_qty);
-      if (stockQty !== null) {
+      const groupQty = Number(item.group_qty || 0);
+      if (stockQty !== null || groupQty > 0) {
         const stockRow = document.createElement("div");
         stockRow.className = "stock-row";
-        const stock = document.createElement("span");
-        const state = stockBadgeState(stockQty);
-        stock.className = `stock-badge${state && state !== "ok" ? ` ${state}` : ""}`;
-        stock.textContent = `Осталось: ${stockQty} шт`;
-        stockRow.appendChild(stock);
+        if (stockQty !== null) {
+          const stock = document.createElement("span");
+          const state = stockBadgeState(stockQty);
+          stock.className = `stock-badge${state && state !== "ok" ? ` ${state}` : ""}`;
+          stock.textContent = `Осталось: ${stockQty} шт`;
+          stockRow.appendChild(stock);
+        }
+        if (groupQty > 0) {
+          const group = document.createElement("span");
+          group.className = "stock-badge";
+          group.textContent = `Выбрали: ${groupQty}`;
+          stockRow.appendChild(group);
+        }
         main.appendChild(stockRow);
       }
 

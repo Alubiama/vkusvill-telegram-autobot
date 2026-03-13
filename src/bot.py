@@ -239,6 +239,7 @@ class VkusvillGroupBot:
                 [InlineKeyboardButton("Собрать batch", callback_data="ctl|collectnow")],
                 [InlineKeyboardButton("Добрать недостающее", callback_data="ctl|retrymissing")],
                 [InlineKeyboardButton("Закрыть цикл", callback_data="ctl|closecycle")],
+                [InlineKeyboardButton("Отменить open batch", callback_data="ctl|cancelcycle")],
                 [InlineKeyboardButton("Статус циклов", callback_data="ctl|cyclestatus")],
             ]
         )
@@ -278,6 +279,16 @@ class VkusvillGroupBot:
             return "Нет цикла со статусом «ждет оплаты»."
         self.store.update_cycle_status(day, cycle.batch_id, "closed", closed_at=self._now_iso(), paid_at=self._now_iso())
         return f"{self._batch_label(cycle.batch_id)} закрыт. Следующие выборы пойдут в новый open batch."
+
+    def _cancel_open_cycle(self, day: str) -> str:
+        cycle = self._current_open_cycle(day)
+        if cycle is None:
+            return "Сейчас нет open batch для отмены."
+        self.store.update_cycle_status(day, cycle.batch_id, "cancelled", closed_at=self._now_iso())
+        return (
+            f"{self._batch_label(cycle.batch_id)} отменен. "
+            "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый open batch."
+        )
 
     def _find_batch_user_by_name(self, day: str, name: str, batch_id: int | None = None) -> tuple[int | None, str | None, str | None]:
         target_name = str(name or "").strip()
@@ -741,6 +752,11 @@ class VkusvillGroupBot:
         groups, favorites, ready_food = self._mini_groups(items)
         snapshot_id = self._snapshot_id(items, day)
         regular_count = sum(len(g["items"]) for g in groups)
+        totals_map = {
+            str(row["item_id"]): int(row["qty"])
+            for row in self.store.totals_by_item(day)
+            if int(row.get("qty") or 0) > 0
+        }
 
         unique_items: list[object] = []
         index_by_item_id: dict[str, int] = {}
@@ -760,6 +776,11 @@ class VkusvillGroupBot:
             group_indexes.append([register(item) for item in g["items"]])
         favorite_indexes = [register(item) for item in favorites[:1]]
         ready_food_indexes = [register(item) for item in ready_food]
+        group_totals = [
+            [idx, totals_map.get(str(item.item_id), 0)]
+            for idx, item in enumerate(unique_items)
+            if totals_map.get(str(item.item_id), 0) > 0
+        ]
 
         return {
             "d": day,
@@ -783,6 +804,7 @@ class VkusvillGroupBot:
             "g": group_indexes,
             "f": favorite_indexes,
             "r": ready_food_indexes,
+            "gt": group_totals,
             "rc": regular_count,
             "cap": 18,
             "generated_at": self._now_iso(),
@@ -806,6 +828,11 @@ class VkusvillGroupBot:
         groups, favorites, ready_food = self._mini_groups(items)
         snapshot_id = self._snapshot_id(items, day)
         regular_count = sum(len(g["items"]) for g in groups)
+        totals_map = {
+            str(row["item_id"]): int(row["qty"])
+            for row in self.store.totals_by_item(day)
+            if int(row.get("qty") or 0) > 0
+        }
 
         # Compact payload: dictionary of unique items + group indexes.
         # This keeps URL safely short for Telegram WebApp buttons.
@@ -827,6 +854,11 @@ class VkusvillGroupBot:
             group_indexes.append([register(item) for item in g["items"]])
         favorite_indexes = [register(item) for item in favorites[:1]]
         ready_food_indexes = [register(item) for item in ready_food]
+        group_totals = [
+            [idx, totals_map.get(str(item.item_id), 0)]
+            for idx, item in enumerate(unique_items)
+            if totals_map.get(str(item.item_id), 0) > 0
+        ]
 
         def _compact_image_url(url: str) -> str:
             raw = (url or "").strip()
@@ -869,6 +901,7 @@ class VkusvillGroupBot:
             "g": group_indexes,
             "f": favorite_indexes,
             "r": ready_food_indexes,
+            "gt": group_totals,
             "rc": regular_count,
             "cap": 18,
         }
@@ -1442,6 +1475,14 @@ class VkusvillGroupBot:
                 await query.message.reply_text(closed)
             return
 
+        if action == "cancelcycle":
+            await query.answer("Отменяю open batch...")
+            day = self._today()
+            cancelled = self._cancel_open_cycle(day)
+            if query.message is not None:
+                await query.message.reply_text(cancelled)
+            return
+
         if action == "cyclestatus":
             await query.answer()
             if query.message is not None:
@@ -1846,6 +1887,13 @@ class VkusvillGroupBot:
         if not await self._check_owner_or_reply(update):
             return
         await update.message.reply_text(self._close_waiting_cycle(self._today()))
+
+    async def cancelcycle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        await update.message.reply_text(self._cancel_open_cycle(self._today()))
 
     async def cyclestatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -2398,6 +2446,7 @@ class VkusvillGroupBot:
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
             "/retrymissing - добрать только недостающие позиции (owner)\n"
             "/closecycle - закрыть batch после оплаты (owner)\n"
+            "/cancelcycle - отменить случайный open batch (owner)\n"
             "/cyclestatus - статусы batch-циклов за сегодня (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
@@ -2450,6 +2499,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("collectnow", self.collectnow))
         app.add_handler(CommandHandler("retrymissing", self.retrymissing))
         app.add_handler(CommandHandler("closecycle", self.closecycle))
+        app.add_handler(CommandHandler("cancelcycle", self.cancelcycle))
         app.add_handler(CommandHandler("cyclestatus", self.cyclestatus))
         app.add_handler(CommandHandler("resetday", self.resetday))
         app.add_handler(CommandHandler("clearuser", self.clearuser))
