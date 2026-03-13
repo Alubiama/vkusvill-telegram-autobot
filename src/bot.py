@@ -36,18 +36,21 @@ from telegram.ext import (
 from .config import Settings
 from .command_utils import command_to_args, project_root
 from .providers import BaseProvider, ManualJsonProvider, RPACommandProvider
-from .store import StateStore
+from .store import OrderCycle, StateStore
 
 LOGGER = logging.getLogger(__name__)
 
 
 class VkusvillGroupBot:
     COLLECT_NOW_BUTTON = "Собрать заказ сейчас"
+    RETRY_MISSING_BUTTON = "Добрать недостающее"
+    CLOSE_CYCLE_BUTTON = "Закрыть цикл после оплаты"
 
     def __init__(self, settings: Settings, store: StateStore, provider: BaseProvider) -> None:
         self.settings = settings
         self.store = store
         self.provider = provider
+        self._finalize_lock = asyncio.Lock()
 
     def _today(self) -> str:
         return datetime.now(self.settings.timezone).strftime("%Y-%m-%d")
@@ -213,6 +216,68 @@ class VkusvillGroupBot:
 
     def _now_iso(self) -> str:
         return datetime.now(self.settings.timezone).isoformat(timespec="seconds")
+
+    @staticmethod
+    def _batch_label(batch_id: int | None) -> str:
+        return f"batch #{int(batch_id)}" if batch_id is not None else "batch ?"
+
+    @staticmethod
+    def _cycle_state_human(status: str) -> str:
+        mapping = {
+            "open": "открыт",
+            "finalizing": "собирается",
+            "partially_added": "частично добавлен",
+            "added_waiting_payment": "ждет оплаты",
+            "closed": "закрыт",
+            "cancelled": "отменен",
+        }
+        return mapping.get(status, status)
+
+    def _owner_controls_markup(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("Собрать batch", callback_data="ctl|collectnow")],
+                [InlineKeyboardButton("Добрать недостающее", callback_data="ctl|retrymissing")],
+                [InlineKeyboardButton("Закрыть цикл", callback_data="ctl|closecycle")],
+                [InlineKeyboardButton("Статус циклов", callback_data="ctl|cyclestatus")],
+            ]
+        )
+
+    def _format_cycle_line(self, cycle: OrderCycle) -> str:
+        return (
+            f"- {self._batch_label(cycle.batch_id)}: {self._cycle_state_human(cycle.status)}, "
+            f"позиций={cycle.selected_positions}, людей={cycle.selected_users}, "
+            f"сумма={float(cycle.total_sum):.2f} RUB"
+        )
+
+    def _build_cycle_status_text(self, day: str) -> str:
+        cycles = self.store.list_cycles(day)
+        if not cycles:
+            return f"Циклов за {day} пока нет."
+        lines = [f"Циклы за {day}:"]
+        for cycle in cycles[:6]:
+            lines.append(self._format_cycle_line(cycle))
+            if cycle.status in {"partially_added", "added_waiting_payment"}:
+                missing = self.store.get_missing_cycle_items(day, cycle.batch_id)
+                if missing:
+                    lines.append(f"  недобрано: {len(missing)} поз.")
+        return "\n".join(lines)
+
+    def _current_open_cycle(self, day: str) -> OrderCycle | None:
+        return self.store.get_open_cycle(day)
+
+    def _waiting_payment_cycle(self, day: str) -> OrderCycle | None:
+        return self.store.get_latest_cycle(day, ("added_waiting_payment",))
+
+    def _partial_cycle(self, day: str) -> OrderCycle | None:
+        return self.store.get_latest_cycle(day, ("partially_added",))
+
+    def _close_waiting_cycle(self, day: str) -> str:
+        cycle = self._waiting_payment_cycle(day)
+        if cycle is None:
+            return "Нет цикла со статусом «ждет оплаты»."
+        self.store.update_cycle_status(day, cycle.batch_id, "closed", closed_at=self._now_iso(), paid_at=self._now_iso())
+        return f"{self._batch_label(cycle.batch_id)} закрыт. Следующие выборы пойдут в новый open batch."
 
     @staticmethod
     def _repair_mojibake(text: str) -> str:
@@ -1259,9 +1324,7 @@ class VkusvillGroupBot:
         if self._user_is_owner(update.effective_user.id):
             await update.message.reply_text(
                 "Управление владельца:",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Собрать заказ сейчас", callback_data="ctl|collectnow")]]
-                ),
+                reply_markup=self._owner_controls_markup(),
             )
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1289,29 +1352,62 @@ class VkusvillGroupBot:
             return
 
         action = parts[1]
-        if action != "collectnow":
-            await query.answer()
-            return
-
         if not self._user_is_owner(query.from_user.id):
-            await query.answer("Only owner can finalize.", show_alert=True)
+            await query.answer("Только owner может это делать.", show_alert=True)
             return
 
-        await query.answer("Finalizing...")
-        await self._finalize_impl(context.application)
-        if query.message is not None:
-            await query.message.reply_text("Итог собран сейчас.")
+        if action == "collectnow":
+            await query.answer("Собираю batch...")
+            await self._finalize_impl(context.application, mode="open")
+            if query.message is not None:
+                await query.message.reply_text("Проверил текущий open batch.")
+            return
+
+        if action == "retrymissing":
+            await query.answer("Добираю недостающее...")
+            await self._finalize_impl(context.application, mode="missing")
+            if query.message is not None:
+                await query.message.reply_text("Проверил недостающие позиции.")
+            return
+
+        if action == "closecycle":
+            await query.answer("Закрываю цикл...")
+            day = self._today()
+            closed = self._close_waiting_cycle(day)
+            if query.message is not None:
+                await query.message.reply_text(closed)
+            return
+
+        if action == "cyclestatus":
+            await query.answer()
+            if query.message is not None:
+                await query.message.reply_text(self._build_cycle_status_text(self._today()))
+            return
+
+        await query.answer()
 
     async def on_text_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
             return
         text = (update.message.text or "").strip()
-        if text != self.COLLECT_NOW_BUTTON:
+        if text not in {
+            self.COLLECT_NOW_BUTTON,
+            self.RETRY_MISSING_BUTTON,
+            self.CLOSE_CYCLE_BUTTON,
+        }:
             return
         if not await self._check_owner_or_reply(update):
             return
-        await self._finalize_impl(context.application)
-        await update.message.reply_text("Итог собран сейчас.")
+        if text == self.COLLECT_NOW_BUTTON:
+            await self._finalize_impl(context.application, mode="open")
+            await update.message.reply_text("Проверил текущий open batch.")
+            return
+        if text == self.RETRY_MISSING_BUTTON:
+            await self._finalize_impl(context.application, mode="missing")
+            await update.message.reply_text("Проверил недостающие позиции.")
+            return
+        day = self._today()
+        await update.message.reply_text(self._close_waiting_cycle(day))
 
     async def on_webapp_data(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or update.effective_user is None:
@@ -1358,9 +1454,11 @@ class VkusvillGroupBot:
                 self._trace_webapp(f"single_choice_not_found item_id={item_id}")
                 await update.message.reply_text("Item not found for today.")
                 return
-            self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
+            batch_id = self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
             self._trace_webapp(f"single_choice_saved item_id={item_id} qty={max(0, qty)}")
-            await update.message.reply_text(f"Saved: {items_by_id[item_id].name} -> {max(0, qty)}")
+            await update.message.reply_text(
+                f"Сохранено в {self._batch_label(batch_id)}: {items_by_id[item_id].name} -> {max(0, qty)}"
+            )
             return
 
         if ptype == "all_choices":
@@ -1379,6 +1477,7 @@ class VkusvillGroupBot:
             qty_map = payload.get("qty") or {}
             selected_positive = 0
             touched = 0
+            batch_id: int | None = None
             for item_id, raw_qty in qty_map.items():
                 if item_id not in items_by_id:
                     continue
@@ -1386,7 +1485,7 @@ class VkusvillGroupBot:
                     qty = max(0, int(raw_qty))
                 except (TypeError, ValueError):
                     continue
-                self.store.set_vote(day, user_id, user_name, item_id, qty)
+                batch_id = self.store.set_vote(day, user_id, user_name, item_id, qty)
                 touched += 1
                 if qty > 0:
                     selected_positive += 1
@@ -1423,13 +1522,13 @@ class VkusvillGroupBot:
             self._trace_webapp(f"all_choices_saved selected={selected_positive} touched={touched}")
             if snapshot_mismatch:
                 msg = (
-                    f"Сохранено: {selected_positive} товаров (обновлено {touched}). "
+                    f"Сохранено в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched}). "
                     "Часть позиций могла измениться после обновления, это нормально."
                 )
             else:
-                msg = f"Сохранено: {selected_positive} товаров (обновлено {touched})."
+                msg = f"Сохранено в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched})."
             if selected_positive == 0:
-                msg = "Выбор очищен. Сейчас у тебя нет активных товаров."
+                msg = f"Выбор очищен в {self._batch_label(batch_id)}. Сейчас у тебя нет активных товаров."
             if selected_preview:
                 msg = f"{msg}\nТвой выбор:\n{selected_preview}"
             await update.message.reply_text(msg)
@@ -1437,9 +1536,12 @@ class VkusvillGroupBot:
             current_chat = update.effective_chat.id if update.effective_chat else None
             if bound_chat_id is not None and current_chat is not None and bound_chat_id != current_chat:
                 if selected_positive == 0:
-                    group_msg = f"{user_name}: выбор очищен."
+                    group_msg = f"{user_name}: выбор очищен в {self._batch_label(batch_id)}."
                 else:
-                    group_msg = f"{user_name}: выбрано {selected_positive} товаров (обновлено {touched})."
+                    group_msg = (
+                        f"{user_name}: {self._batch_label(batch_id)}, "
+                        f"выбрано {selected_positive} товаров (обновлено {touched})."
+                    )
                 if selected_preview and selected_positive > 0:
                     group_msg = f"{group_msg}\nВыбор:\n{selected_preview}"
                 await self._send(
@@ -1560,18 +1662,27 @@ class VkusvillGroupBot:
         if update.message is None:
             return
         day = self._today()
-        totals = self.store.totals_by_item(day)
-        if not totals:
+        open_cycle = self._current_open_cycle(day)
+        totals = self.store.totals_by_item(day, batch_id=open_cycle.batch_id) if open_cycle else []
+        waiting = self._waiting_payment_cycle(day)
+        partial = self._partial_cycle(day)
+        if not totals and open_cycle is None and waiting is None and partial is None:
             await update.message.reply_text(
-                f"На сегодня данных пока нет. Автообновление: {self._collection_schedule_text()} (Europe/Moscow)."
+                f"На сегодня активного цикла пока нет. Автообновление: {self._collection_schedule_text()} (Europe/Moscow)."
             )
             return
 
-        lines = [f"Status for {day}:"]
+        lines = [f"Статус за {day}:"]
+        if open_cycle is not None:
+            lines.append(f"Open: {self._batch_label(open_cycle.batch_id)}")
         for row in totals:
             lines.append(
-                f"- {row['name']}: {int(row['qty'])} pcs ({float(row['discount_price']):.2f} RUB)"
+                f"- {row['name']}: {int(row['qty'])} шт ({float(row['discount_price']):.2f} RUB)"
             )
+        if waiting is not None:
+            lines.append(f"Ждет оплаты: {self._batch_label(waiting.batch_id)}")
+        if partial is not None:
+            lines.append(f"Частично добавлен: {self._batch_label(partial.batch_id)}")
         await update.message.reply_text("\n".join(lines))
 
     async def cart(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1647,16 +1758,37 @@ class VkusvillGroupBot:
     async def finalize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
             return
-        await self._finalize_impl(context.application)
+        await self._finalize_impl(context.application, mode="open")
         if update.message:
-            await update.message.reply_text("Итоговый заказ сформирован.")
+            await update.message.reply_text("Проверил текущий open batch.")
 
     async def collectnow(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
             return
-        await self._finalize_impl(context.application)
+        await self._finalize_impl(context.application, mode="open")
         if update.message:
-            await update.message.reply_text("Итог собран сейчас.")
+            await update.message.reply_text("Проверил текущий open batch.")
+
+    async def retrymissing(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_owner_or_reply(update):
+            return
+        await self._finalize_impl(context.application, mode="missing")
+        if update.message:
+            await update.message.reply_text("Проверил недостающие позиции.")
+
+    async def closecycle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        await update.message.reply_text(self._close_waiting_cycle(self._today()))
+
+    async def cyclestatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        await update.message.reply_text(self._build_cycle_status_text(self._today()))
 
     async def resetday(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -1675,8 +1807,13 @@ class VkusvillGroupBot:
         if not await self._check_owner_or_reply(update):
             return
         day = self._today()
-        self.store.clear_votes(day)
-        await update.message.reply_text(f"Выборы за {day} очищены. Можно собирать новый заказ.")
+        batch_id = self.store.clear_votes(day)
+        if batch_id is None:
+            await update.message.reply_text(f"За {day} нет open batch для очистки.")
+            return
+        await update.message.reply_text(
+            f"Выборы в {self._batch_label(batch_id)} очищены. Можно собирать новый заказ."
+        )
 
     def _schedule_startup_collect_if_needed(self, app: Application) -> None:
         day = self._today()
@@ -1691,71 +1828,176 @@ class VkusvillGroupBot:
             return
         app.job_queue.run_once(self.scheduled_collect, when=5, name="collect-startup-catchup")
 
-    def _build_final_payload(self, day: str) -> dict:
-        totals = self.store.totals_by_item(day)
-        users = self.store.votes_by_user(day)
-        selected = [row for row in totals if int(row["qty"]) > 0]
+    def _build_final_payload(self, day: str, batch_id: int, only_missing: bool = False) -> dict:
+        if only_missing:
+            missing_rows = self.store.get_missing_cycle_items(day, batch_id)
+            selected = [
+                {
+                    "item_id": row.item_id,
+                    "name": row.name,
+                    "price": float(row.price),
+                    "discount_price": float(row.discount_price),
+                    "qty": int(row.requested_qty - row.added_qty),
+                }
+                for row in missing_rows
+                if int(row.requested_qty) > int(row.added_qty)
+            ]
+            selected_ids = {str(row["item_id"]) for row in selected}
+            users = [row for row in self.store.votes_by_user(day, batch_id=batch_id) if str(row["item_id"]) in selected_ids]
+        else:
+            totals = self.store.totals_by_item(day, batch_id=batch_id)
+            users = self.store.votes_by_user(day, batch_id=batch_id)
+            selected = [row for row in totals if int(row["qty"]) > 0]
         total_sum = sum(float(row["discount_price"]) * int(row["qty"]) for row in selected)
         return {
             "day": day,
+            "batch_id": batch_id,
             "items": selected,
             "votes_by_user": users,
             "total_sum_discount_price": round(total_sum, 2),
             "dry_run": self.settings.dry_run,
+            "mode": "missing" if only_missing else "full",
         }
 
-    async def _finalize_impl(self, app: Application) -> None:
-        day = self._today()
-        payload = self._build_final_payload(day)
-        Path(self.settings.out_dir).mkdir(parents=True, exist_ok=True)
-        out_path = Path(self.settings.out_dir) / f"order_{day}.json"
-        out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        backup_path = (
-            Path(self.settings.out_dir)
-            / f"votes_backup_{day}_{datetime.now(self.settings.timezone).strftime('%H%M%S')}.json"
-        )
-        backup_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.store.set_meta("last_finalize_at", self._now_iso())
-        self.store.set_meta("last_finalize_day", day)
-        self.store.set_meta("last_finalize_backup", str(backup_path))
-
-        if not payload["items"]:
-            await self._send(app, f"Итог за {day}: никто не выбрал товары.")
+    async def _finalize_impl(self, app: Application, mode: str = "open") -> None:
+        if self._finalize_lock.locked():
+            await self._send_owner(app, "Finalize уже идет. Подожди завершения текущего прогона.")
             return
 
-        lines = [f"Итоговый заказ за {day}:"]
-        for row in payload["items"]:
-            lines.append(
-                f"- {row['name']}: {int(row['qty'])} шт x {float(row['discount_price']):.2f} RUB"
-            )
-        lines.append(f"Сумма: {payload['total_sum_discount_price']:.2f} RUB")
-        if self.settings.dry_run:
-            lines.append("Режим: DRY_RUN (автооформление отключено)")
+        async with self._finalize_lock:
+            day = self._today()
+            busy = self.store.get_latest_cycle(day, ("finalizing",))
+            if busy is not None:
+                await self._send_owner(app, f"{self._batch_label(busy.batch_id)} уже в статусе finalizing.")
+                return
 
-        await self._send(app, "\n".join(lines))
-        await self._send_owner(
-            app,
-            (
-                f"Итог за {day} сохранен.\n"
-                f"Файл заказа: {out_path}\n"
-                f"Резерв голосов: {backup_path}"
-            ),
-        )
-        exec_result = await self._run_executor_if_needed(app, out_path)
-        if bool(exec_result.get("ok")):
-            self.store.clear_votes(day)
-            await self._send(app, "Выборы за текущий день сброшены. Можно собирать новый заказ с нуля.")
-        else:
+            if mode == "missing":
+                cycle = self._partial_cycle(day)
+                if cycle is None:
+                    await self._send_owner(app, "Нет batch со статусом «частично добавлен».")
+                    return
+                payload = self._build_final_payload(day, cycle.batch_id, only_missing=True)
+            else:
+                cycle = self._current_open_cycle(day)
+                if cycle is None:
+                    waiting = self._waiting_payment_cycle(day)
+                    if waiting is not None:
+                        await self._send_owner(
+                            app,
+                            f"Сейчас нет open batch. {self._batch_label(waiting.batch_id)} уже ждет оплаты.",
+                        )
+                    else:
+                        await self._send_owner(app, "Сейчас нет open batch для сборки.")
+                    return
+                payload = self._build_final_payload(day, cycle.batch_id, only_missing=False)
+
+            Path(self.settings.out_dir).mkdir(parents=True, exist_ok=True)
+            out_path = Path(self.settings.out_dir) / f"order_{day}_b{cycle.batch_id}.json"
+            backup_path = (
+                Path(self.settings.out_dir)
+                / f"votes_backup_{day}_b{cycle.batch_id}_{datetime.now(self.settings.timezone).strftime('%H%M%S')}.json"
+            )
+            out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            backup_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            self.store.set_meta("last_finalize_at", self._now_iso())
+            self.store.set_meta("last_finalize_day", day)
+            self.store.set_meta("last_finalize_backup", str(backup_path))
+            self.store.set_meta("last_finalize_batch_id", str(cycle.batch_id))
+
+            if not payload["items"]:
+                if mode == "missing":
+                    self.store.update_cycle_status(
+                        day,
+                        cycle.batch_id,
+                        "added_waiting_payment",
+                        finalized_at=self._now_iso(),
+                        out_path=str(out_path),
+                        backup_path=str(backup_path),
+                    )
+                    await self._send_owner(
+                        app,
+                        f"У {self._batch_label(cycle.batch_id)} больше нет недостающих позиций. Он ждет оплаты.",
+                    )
+                else:
+                    await self._send(app, f"{self._batch_label(cycle.batch_id)}: никто не выбрал товары.")
+                return
+
+            if mode != "missing":
+                self.store.replace_cycle_item_results(day, cycle.batch_id, payload["items"])
+
+            self.store.update_cycle_status(
+                day,
+                cycle.batch_id,
+                "finalizing",
+                finalized_at=self._now_iso(),
+                out_path=str(out_path),
+                backup_path=str(backup_path),
+                total_sum=float(payload["total_sum_discount_price"]),
+                selected_positions=len(payload["items"]),
+                selected_users=len({int(row["user_id"]) for row in payload["votes_by_user"]}) if payload["votes_by_user"] else 0,
+            )
+
+            lines = [f"Итоговый заказ за {day} ({self._batch_label(cycle.batch_id)}):"]
+            for row in payload["items"]:
+                lines.append(
+                    f"- {row['name']}: {int(row['qty'])} шт x {float(row['discount_price']):.2f} RUB"
+                )
+            lines.append(f"Сумма: {payload['total_sum_discount_price']:.2f} RUB")
+            if self.settings.dry_run:
+                lines.append("Режим: DRY_RUN (автооформление отключено)")
+
+            await self._send(app, "\n".join(lines))
             await self._send_owner(
                 app,
                 (
-                    "Выборы НЕ очищены: автооформление не завершилось успешно.\n"
+                    f"{self._batch_label(cycle.batch_id)} сохранен.\n"
+                    f"Файл заказа: {out_path}\n"
                     f"Резерв голосов: {backup_path}"
                 ),
             )
 
-    async def _run_executor_if_needed(self, app: Application, out_path: Path) -> dict:
+            exec_result = await self._run_executor_if_needed(app, out_path, day=day, batch_id=cycle.batch_id)
+            missing = self.store.get_missing_cycle_items(day, cycle.batch_id)
+            if bool(exec_result.get("ok")) and not missing:
+                self.store.update_cycle_status(
+                    day,
+                    cycle.batch_id,
+                    "added_waiting_payment",
+                    executor_status=str(exec_result.get("status") or "success"),
+                )
+                await self._send(app, f"{self._batch_label(cycle.batch_id)} добавлен в корзину и ждет оплаты.")
+            else:
+                self.store.update_cycle_status(
+                    day,
+                    cycle.batch_id,
+                    "partially_added",
+                    executor_status=str(exec_result.get("status") or "partial"),
+                )
+                await self._send(app, f"{self._batch_label(cycle.batch_id)} обработан. Если что-то не добавилось, owner доберет недостающее.")
+
+    async def _run_executor_if_needed(self, app: Application, out_path: Path, day: str, batch_id: int) -> dict:
         if self.settings.dry_run:
+            fake_checks = [
+                {
+                    "name": row.name,
+                    "requested_qty": int(row.requested_qty),
+                    "before_qty": 0,
+                    "after_qty": int(row.requested_qty),
+                    "added_delta": int(row.requested_qty),
+                    "ok": True,
+                    "reason": "dry_run",
+                }
+                for row in self.store.list_cycle_item_results(day, batch_id)
+            ]
+            self.store.apply_executor_results(
+                day=day,
+                batch_id=batch_id,
+                executor_status="dry_run_skip",
+                ok_count=len(fake_checks),
+                total=len(fake_checks),
+                checks=fake_checks,
+            )
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "dry_run_skip")
             return {"ok": True, "status": "dry_run_skip"}
@@ -1845,6 +2087,14 @@ class VkusvillGroupBot:
                 checks = payload.get("checks") or []
                 ok_count = sum(1 for x in checks if bool((x or {}).get("ok")))
                 total = int(payload.get("targets") or len(checks) or 0)
+                self.store.apply_executor_results(
+                    day=day,
+                    batch_id=batch_id,
+                    executor_status=("success" if bool(payload.get("ok")) else "partial"),
+                    ok_count=ok_count,
+                    total=total,
+                    checks=checks if isinstance(checks, list) else [],
+                )
                 if total <= 0:
                     msg = str(payload.get("message") or "").strip()
                     if msg == "no_selected_items":
@@ -1952,9 +2202,12 @@ class VkusvillGroupBot:
         regular_count = self._regular_inshop_count(items)
         favorite_count = sum(1 for x in items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in items if self._is_ready_food_offer(x.source))
-        totals = self.store.totals_by_item(day)
+        open_cycle = self._current_open_cycle(day)
+        totals = self.store.totals_by_item(day, batch_id=open_cycle.batch_id) if open_cycle else []
         active_votes = sum(1 for row in totals if int(row.get("qty") or 0) > 0)
-        users = self.store.votes_by_user(day)
+        users = self.store.votes_by_user(day, batch_id=open_cycle.batch_id) if open_cycle else []
+        waiting_cycle = self._waiting_payment_cycle(day)
+        partial_cycle = self._partial_cycle(day)
 
         bound_chat = self._get_chat_id()
         owner_id = self._get_owner_user_id()
@@ -2008,6 +2261,9 @@ class VkusvillGroupBot:
             f"- dry_run: {self.settings.dry_run}",
             f"- items: total={len(items)}, regular={regular_count}/18, favorite={favorite_count}, ready_food={ready_food_count}",
             f"- source_for_app: {snapshot_source}",
+            f"- open_cycle: {self._batch_label(open_cycle.batch_id) if open_cycle else 'n/a'}",
+            f"- waiting_cycle: {self._batch_label(waiting_cycle.batch_id) if waiting_cycle else 'n/a'}",
+            f"- partial_cycle: {self._batch_label(partial_cycle.batch_id) if partial_cycle else 'n/a'}",
             f"- votes: users={len(users)}, selected_positions={active_votes}",
             f"- last_collect: status={last_collect_status}, at={last_collect_at}",
             f"- last_sessioncheck: status={last_sessioncheck_status}, at={last_sessioncheck_at}",
@@ -2033,6 +2289,9 @@ class VkusvillGroupBot:
             "/mirror [YYYY-MM-DD] - собрать локальный кэш картинок (owner)\n"
             "/publishapp - опубликовать Mini App на GitHub Pages (owner)\n"
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
+            "/retrymissing - добрать только недостающие позиции (owner)\n"
+            "/closecycle - закрыть batch после оплаты (owner)\n"
+            "/cyclestatus - статусы batch-циклов за сегодня (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
             "/clearvotes - очистить только выборы за сегодня (owner)\n"
@@ -2081,6 +2340,9 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("health", self.health))
         app.add_handler(CommandHandler("finalize", self.finalize))
         app.add_handler(CommandHandler("collectnow", self.collectnow))
+        app.add_handler(CommandHandler("retrymissing", self.retrymissing))
+        app.add_handler(CommandHandler("closecycle", self.closecycle))
+        app.add_handler(CommandHandler("cyclestatus", self.cyclestatus))
         app.add_handler(CommandHandler("resetday", self.resetday))
         app.add_handler(CommandHandler("clearvotes", self.clearvotes))
         app.add_handler(CommandHandler("sessioncheck", self.sessioncheck))
