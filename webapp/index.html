@@ -39,7 +39,7 @@
     }
     .shell {
       width: 100%;
-      max-width: 372px;
+      max-width: 388px;
       margin: 0 auto;
       display: grid;
       gap: 9px;
@@ -59,8 +59,8 @@
       justify-content: space-between;
       gap: 8px;
     }
-    .t1 { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.01em; }
-    .t2 { font-size: 28px; line-height: 1; font-weight: 800; margin-top: 2px; }
+    .t1 { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .t2 { font-size: 30px; line-height: 1; font-weight: 800; margin-top: 2px; }
     .pill {
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -79,9 +79,14 @@
     }
     .section-sub {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
       margin-bottom: 8px;
       line-height: 1.35;
+    }
+    .tab-meta {
+      margin-top: 6px;
+      margin-bottom: 0;
+      font-weight: 700;
     }
     .tabs {
       display: flex;
@@ -110,6 +115,26 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .sub-tabs {
+      margin-top: 7px;
+      gap: 5px;
+    }
+    .sub-tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fcf6;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 9px;
+      cursor: pointer;
+      transition: transform 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+    }
+    .sub-tab.active {
+      background: #eef8f0;
+      color: var(--ok);
+      border-color: #9bc7a9;
+    }
     .group-head {
       display: flex;
       align-items: center;
@@ -126,7 +151,7 @@
       background: #f9fdf8;
       color: var(--muted);
       border-radius: 9px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       line-height: 1;
       padding: 7px 9px;
@@ -209,7 +234,7 @@
       padding: 3px 7px;
     }
     .name {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 800;
       line-height: 1.22;
       margin-bottom: 5px;
@@ -248,7 +273,7 @@
       border: 1px solid #b7dbc4;
       background: #f2fbf4;
       color: #206243;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       line-height: 1;
       padding: 5px 8px;
@@ -294,7 +319,7 @@
     }
     .actions {
       display: grid;
-      grid-template-columns: 1.2fr 1fr 1fr;
+      grid-template-columns: 1.5fr 1fr;
       gap: 8px;
       position: sticky;
       bottom: 0;
@@ -333,9 +358,15 @@
     .empty {
       text-align: center;
       color: var(--muted);
-      padding: 20px 10px;
+      padding: 18px 12px;
       line-height: 1.42;
       font-size: 13px;
+    }
+    .soft-note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
     }
     .send-state {
       border: 1px solid var(--line);
@@ -389,16 +420,17 @@
   <div class="shell">
     <section class="card top">
       <div>
-        <div class="t1" id="appMeta">Vkusvill Mini App</div>
+        <div class="t1" id="appMeta">Скидки на сегодня</div>
         <div class="t2" id="day">-</div>
       </div>
       <div class="pill" id="summary">Выбрано: 0</div>
     </section>
 
     <section class="card">
-      <div class="section-title">Товары на сегодня</div>
-      <div class="section-sub" id="overviewSub">3 подборки по 6. Любимый товар вынесен отдельно.</div>
+      <div class="section-title">Что можно выбрать</div>
       <div id="tabs" class="tabs"></div>
+      <div id="tabMeta" class="section-sub tab-meta"></div>
+      <div id="subTabs" class="tabs sub-tabs" style="display:none"></div>
     </section>
 
     <section class="card">
@@ -418,13 +450,13 @@
     <section class="actions">
       <button class="action-btn primary" id="sendAllBtn" type="button">Отправить выбор</button>
       <button class="action-btn" id="clearAllBtn" type="button">Снять всё</button>
-      <button class="action-btn" id="closeBtn" type="button">Закрыть</button>
     </section>
     <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
   </div>
 
   <script>
     const BUILD_ID = "b-20260313-stock1";
+    const READY_FOOD_PAGE_SIZE = 8;
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -594,7 +626,7 @@
     const snapshotId = String(payload.snapshot_id || payload.sid || "");
     let imageMirrorMap = {};
     document.getElementById("day").textContent = day;
-    document.getElementById("appMeta").textContent = `Vkusvill Mini App - ${BUILD_ID}`;
+    document.getElementById("appMeta").textContent = "Скидки на сегодня";
 
     const fallbackItems = Array.isArray(payload.items)
       ? payload.items.map(unpackItem).filter(validItem)
@@ -710,17 +742,14 @@
     const allRealItems = Array.from(allById.values());
 
     function updateOverview() {
-      const el = document.getElementById("overviewSub");
+      const el = document.getElementById("appMeta");
       if (!el) return;
       const regularCount = Number(payload.regular_count ?? payload.rc ?? groups.reduce((acc, g) => acc + g.items.length, 0));
       const regularCapacity = Number(payload.regular_capacity ?? payload.cap ?? 18);
-      const parts = [`3 подборки по 6 (${regularCount}/${regularCapacity})`];
-      if (favoriteItems.length) parts.push("любимый товар отдельно");
-      if (regularCount < regularCapacity) {
-        parts.push("часть слотов пока недоступна");
-      }
-      if (readyFoodItems.length) parts.push(`готовая еда: ${readyFoodItems.length}`);
-      el.textContent = `${parts.join(", ")}.`;
+      const parts = [`${regularCount}/${regularCapacity} скидок`];
+      if (favoriteItems.length) parts.push("любимый");
+      if (readyFoodItems.length) parts.push(`еда ${readyFoodItems.length}`);
+      el.textContent = parts.join(" · ");
     }
 
     function setSendState(text, kind = "ok") {
@@ -737,6 +766,7 @@
     }
 
     let activeTab = tabs.length ? tabs[0].id : "g1";
+    let readyFoodPage = 0;
 
     function rub(value) {
       const n = Number(value || 0);
@@ -774,11 +804,30 @@
       return tabs.find((x) => x.id === activeTab) || tabs[0] || null;
     }
 
+    function getVisibleItems(tab) {
+      if (!tab) return [];
+      if (tab.type !== "ready_food") return Array.isArray(tab.items) ? tab.items : [];
+      const start = readyFoodPage * READY_FOOD_PAGE_SIZE;
+      return (tab.items || []).slice(start, start + READY_FOOD_PAGE_SIZE);
+    }
+
+    function getTabMeta(tab) {
+      if (!tab) return "";
+      if (tab.type === "group") return `${tab.title} · ${tab.items.length} из 6 товаров`;
+      if (tab.type === "favorite") return "Любимый товар дня";
+      if (tab.type === "ready_food") {
+        const pages = Math.max(1, Math.ceil((tab.items.length || 0) / READY_FOOD_PAGE_SIZE));
+        return `Готовая еда · ${tab.items.length} товаров · страница ${readyFoodPage + 1} из ${pages}`;
+      }
+      return `${tab.items.length} товаров`;
+    }
+
     function setTabSelection(mode) {
       const tab = getActiveTab();
-      if (!tab || !Array.isArray(tab.items) || !tab.items.length) return;
+      const visibleItems = getVisibleItems(tab);
+      if (!tab || !visibleItems.length) return;
       const next = mode === "all" ? 1 : 0;
-      for (const item of tab.items) {
+      for (const item of visibleItems) {
         if (!item?.item_id) continue;
         selected[item.item_id] = next;
       }
@@ -806,16 +855,15 @@
     function renderTabs() {
       const root = document.getElementById("tabs");
       root.innerHTML = "";
+      const labels = { g1: "1", g2: "2", g3: "3", favorite: "Любимый", ready_food: "Еда" };
       for (const tab of tabs) {
         const btn = document.createElement("button");
         btn.className = `tab${tab.id === activeTab ? " active" : ""}`;
-        if (tab.type === "group") {
-          btn.textContent = `${tab.title} (${tab.items.length}/6)`;
-        } else {
-          btn.textContent = `${tab.title} (${tab.items.length})`;
-        }
+        const label = labels[tab.id] || tab.title;
+        btn.textContent = tab.type === "ready_food" ? `${label} ${tab.items.length}` : label;
         btn.addEventListener("click", () => {
           activeTab = tab.id;
+          if (tab.type === "ready_food") readyFoodPage = 0;
           renderTabs();
           renderGroup();
         });
@@ -823,30 +871,29 @@
       }
     }
 
-    function renderPlaceholder(itemsEl, idx) {
-      const wrap = document.createElement("article");
-      wrap.className = "item";
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = `Слот ${idx + 1}: ожидаем после обновления`;
-      wrap.appendChild(name);
-
-      const prices = document.createElement("div");
-      prices.className = "price-row";
-      prices.innerHTML = `
-        <div class="price-box">
-          <div class="price-label">Цена</div>
-          <div class="price-val discount">--</div>
-        </div>
-      `;
-      wrap.appendChild(prices);
-
-      const t = document.createElement("button");
-      t.className = "toggle";
-      t.textContent = "Ожидание";
-      t.disabled = true;
-      wrap.appendChild(t);
-      itemsEl.appendChild(wrap);
+    function renderSubTabs(tab) {
+      const root = document.getElementById("subTabs");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!tab || tab.type !== "ready_food" || tab.items.length <= READY_FOOD_PAGE_SIZE) {
+        root.style.display = "none";
+        return;
+      }
+      root.style.display = "flex";
+      const pageCount = Math.ceil(tab.items.length / READY_FOOD_PAGE_SIZE);
+      for (let page = 0; page < pageCount; page++) {
+        const start = page * READY_FOOD_PAGE_SIZE + 1;
+        const end = Math.min((page + 1) * READY_FOOD_PAGE_SIZE, tab.items.length);
+        const btn = document.createElement("button");
+        btn.className = `sub-tab${page === readyFoodPage ? " active" : ""}`;
+        btn.textContent = `${start}-${end}`;
+        btn.addEventListener("click", () => {
+          readyFoodPage = page;
+          renderSubTabs(tab);
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
     }
 
     function renderRealItem(itemsEl, item) {
@@ -940,6 +987,7 @@
     function renderGroup() {
       const titleEl = document.getElementById("groupTitle");
       const subEl = document.getElementById("groupSub");
+      const metaEl = document.getElementById("tabMeta");
       const itemsEl = document.getElementById("items");
       const toolsEl = document.getElementById("groupTools");
       const selectBtn = document.getElementById("selectTabBtn");
@@ -950,44 +998,51 @@
       if (!tab) {
         titleEl.textContent = "Нет товаров";
         subEl.textContent = "";
+        if (metaEl) metaEl.textContent = "Данные на сегодня пока не готовы";
         if (toolsEl) toolsEl.style.display = "none";
         const empty = document.createElement("div");
         empty.className = "empty";
         if (!hasDataParam) {
           empty.innerHTML = "Здесь нет данных по товарам.<br/>Открой Mini App через команду /app в боте.";
         } else {
-          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Обновление идет автоматически в 10:00 (Europe/Moscow).";
+          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Попробуй открыть Mini App чуть позже.";
         }
         itemsEl.appendChild(empty);
+        renderSubTabs(null);
         return;
       }
 
       titleEl.textContent = tab.title;
-      if (tab.type === "group") {
-        subEl.textContent = `${tab.items.length}/6 товаров`;
-      } else {
-        subEl.textContent = `${tab.items.length} товаров`;
-      }
+      subEl.textContent = tab.type === "group"
+        ? "Выбери то, что тебе подходит"
+        : "Нажми на нужные товары и отправь выбор";
+      if (metaEl) metaEl.textContent = getTabMeta(tab);
+      const visibleItems = getVisibleItems(tab);
+      renderSubTabs(tab);
 
       if (toolsEl) {
-        toolsEl.style.display = tab.items.length ? "flex" : "none";
+        toolsEl.style.display = visibleItems.length ? "flex" : "none";
       }
       if (selectBtn) {
-        selectBtn.disabled = !tab.items.length;
-        selectBtn.textContent = tab.type === "group" ? "Выбрать 6" : "Выбрать всё";
+        selectBtn.disabled = !visibleItems.length;
+        selectBtn.textContent = visibleItems.length <= 1 ? "Выбрать" : "Выбрать всё";
       }
       if (clearBtn) {
-        clearBtn.disabled = !tab.items.length;
+        clearBtn.disabled = !visibleItems.length;
       }
 
-      for (const item of tab.items) {
+      if (!visibleItems.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.innerHTML = tab.type === "group"
+          ? "Эта подборка еще не обновилась.<div class=\"soft-note\">Остальные товары появятся после следующего обновления.</div>"
+          : "Здесь пока нет доступных товаров.";
+        itemsEl.appendChild(empty);
+        return;
+      }
+
+      for (const item of visibleItems) {
         renderRealItem(itemsEl, item);
-      }
-
-      if (tab.type === "group" && tab.items.length < 6) {
-        for (let idx = tab.items.length; idx < 6; idx++) {
-          renderPlaceholder(itemsEl, idx);
-        }
       }
     }
 
@@ -1060,7 +1115,6 @@
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);
     document.getElementById("clearAllBtn").addEventListener("click", clearAllSelection);
-    document.getElementById("closeBtn").addEventListener("click", () => tg?.close());
     document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
     document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
 
