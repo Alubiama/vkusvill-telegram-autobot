@@ -55,12 +55,22 @@
     }
     .top {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 8px;
+      gap: 10px;
+    }
+    .top-copy {
+      min-width: 0;
+      flex: 1;
     }
     .t1 { font-size: 12px; font-weight: 700; color: var(--muted); }
     .t2 { font-size: 30px; line-height: 1; font-weight: 800; margin-top: 2px; }
+    .hero-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
     .pill {
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -148,22 +158,24 @@
     }
     .tool-btn {
       border: 1px solid var(--line);
-      background: #f9fdf8;
+      background: #fcfdfb;
       color: var(--muted);
       border-radius: 9px;
       font-size: 12px;
       font-weight: 700;
       line-height: 1;
-      padding: 7px 9px;
+      padding: 6px 9px;
       cursor: pointer;
+      opacity: 0.82;
       transition: all 130ms ease-out;
     }
     .tool-btn:hover {
       border-color: #a3c6ad;
       color: #244635;
+      opacity: 1;
     }
     .tool-btn:disabled {
-      opacity: 0.6;
+      opacity: 0.45;
       cursor: default;
     }
     .items {
@@ -180,14 +192,24 @@
       animation: fade-up 180ms ease-out;
     }
     .item.selected {
-      border-color: #8dc2a1;
-      box-shadow: 0 4px 14px rgba(32, 95, 61, 0.13);
+      border-color: #79b58f;
+      background: #f4fbf5;
+      box-shadow: 0 8px 18px rgba(32, 95, 61, 0.13);
       transform: translateY(-1px);
     }
     .item-meta {
       display: flex;
-      justify-content: flex-end;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
       margin-bottom: 3px;
+    }
+    .item-meta-side {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: wrap;
     }
     .item-head {
       display: grid;
@@ -233,6 +255,19 @@
       font-weight: 700;
       padding: 3px 7px;
     }
+    .selected-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      border: 1px solid #9eceb0;
+      background: #ebf8ef;
+      color: #1e6340;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 7px;
+      white-space: nowrap;
+    }
     .name {
       font-size: 14px;
       font-weight: 800;
@@ -252,13 +287,16 @@
     .price-box {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
-      padding: 6px 8px;
+      padding: 7px 9px;
       background: #fff;
       min-width: 0;
       flex: 1;
     }
-    .price-label { font-size: 10px; color: var(--muted); margin-bottom: 1px; }
-    .price-val { font-size: 17px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
+    .price-box.primary {
+      background: #fbfdf9;
+    }
+    .price-label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+    .price-val { font-size: 20px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
     .discount { color: var(--ok); }
     .stock-row {
       display: flex;
@@ -347,6 +385,11 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .action-btn.secondary {
+      background: #f9fcf7;
+      color: var(--muted);
+      border-color: var(--line);
+    }
     .action-btn:hover {
       transform: translateY(-1px);
       border-color: #95c3a5;
@@ -419,9 +462,10 @@
 <body>
   <div class="shell">
     <section class="card top">
-      <div>
+      <div class="top-copy">
         <div class="t1" id="appMeta">Скидки на сегодня</div>
         <div class="t2" id="day">-</div>
+        <div class="hero-note" id="heroNote">Вкусное само себя не выберет.</div>
       </div>
       <div class="pill" id="summary">Выбрано: 0</div>
     </section>
@@ -449,14 +493,20 @@
 
     <section class="actions">
       <button class="action-btn primary" id="sendAllBtn" type="button">Отправить выбор</button>
-      <button class="action-btn" id="clearAllBtn" type="button">Снять всё</button>
+      <button class="action-btn secondary" id="clearAllBtn" type="button">Снять всё</button>
     </section>
     <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
   </div>
 
   <script>
-    const BUILD_ID = "b-20260313-ui-stage1";
+    const BUILD_ID = "b-20260313-ui-stage2";
     const READY_FOOD_PAGE_SIZE = 8;
+    const HEADER_QUOTES = [
+      "Вкусное само себя не выберет.",
+      "Хотели по одному, а выбрали как всегда с душой.",
+      "Если товар хороший, его долго не откладывают.",
+      "Что выбрано, то уже почти в корзине.",
+    ];
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -797,6 +847,12 @@
 
     function updateSummary() {
       document.getElementById("summary").textContent = `Выбрано: ${selectedCount()}`;
+      const hero = document.getElementById("heroNote");
+      if (hero) {
+        const count = selectedCount();
+        const idx = count > 0 ? Math.min(count, HEADER_QUOTES.length - 1) : 0;
+        hero.textContent = HEADER_QUOTES[idx];
+      }
       syncTelegramMainButton();
     }
 
@@ -907,10 +963,36 @@
       if (isFavorite || isReadyFood) {
         const meta = document.createElement("div");
         meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
         const tag = document.createElement("span");
         tag.className = "tag";
         tag.textContent = isFavorite ? "❤️ Любимый" : "🍱 Готовая еда";
-        meta.appendChild(tag);
+        left.appendChild(tag);
+        if (isSelected) {
+          const mark = document.createElement("span");
+          mark.className = "selected-mark";
+          mark.textContent = "✓ Выбрано";
+          right.appendChild(mark);
+        }
+        meta.appendChild(left);
+        meta.appendChild(right);
+        wrap.appendChild(meta);
+      } else if (isSelected) {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
+        const mark = document.createElement("span");
+        mark.className = "selected-mark";
+        mark.textContent = "✓ Выбрано";
+        right.appendChild(mark);
+        meta.appendChild(left);
+        meta.appendChild(right);
         wrap.appendChild(meta);
       }
 
@@ -954,8 +1036,8 @@
       prices.className = "price-row";
       const currentPrice = Number(item.discount_price || item.price || 0);
       prices.innerHTML = `
-        <div class="price-box">
-          <div class="price-label">💸 Цена</div>
+        <div class="price-box primary">
+          <div class="price-label">Цена сегодня</div>
           <div class="price-val discount">${rub(currentPrice)}</div>
         </div>
       `;
