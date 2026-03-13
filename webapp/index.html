@@ -499,7 +499,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260313-ui-stage3";
+    const BUILD_ID = "b-20260313-ui-stage4";
     const READY_FOOD_PAGE_SIZE = 8;
     const PENDING_SELECTION_KEY = "vv_pending_selection_v1";
     const HEADER_QUOTES = [
@@ -1089,17 +1089,6 @@
       name.textContent = item.name;
       main.appendChild(name);
 
-      const prices = document.createElement("div");
-      prices.className = "price-row";
-      const currentPrice = Number(item.discount_price || item.price || 0);
-      prices.innerHTML = `
-        <div class="price-box primary">
-          <div class="price-label">Цена сегодня</div>
-          <div class="price-val discount">${rub(currentPrice)}</div>
-        </div>
-      `;
-      main.appendChild(prices);
-
       const stockQty = maybeInt(item.stock_qty);
       const groupQty = Number(item.group_qty || 0);
       if (stockQty !== null || groupQty > 0) {
@@ -1120,6 +1109,17 @@
         }
         main.appendChild(stockRow);
       }
+
+      const prices = document.createElement("div");
+      prices.className = "price-row";
+      const currentPrice = Number(item.discount_price || item.price || 0);
+      prices.innerHTML = `
+        <div class="price-box primary">
+          <div class="price-label">Цена сегодня</div>
+          <div class="price-val discount">${rub(currentPrice)}</div>
+        </div>
+      `;
+      main.appendChild(prices);
 
       head.appendChild(main);
       wrap.appendChild(head);

@@ -277,6 +277,27 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
             'article',
           ];
           const nodes = [];
+          const collectStockText = (el) => {
+            if (!el) return '';
+            const candidates = [
+              '[class*="stock"]',
+              '[class*="avail"]',
+              '[class*="presence"]',
+              '[class*="amount"]',
+              '[class*="qty"]',
+              '[data-testid*="stock"]',
+              '[data-testid*="avail"]',
+            ];
+            const texts = [];
+            for (const sel of candidates) {
+              for (const node of el.querySelectorAll(sel)) {
+                const txt = (node.innerText || node.textContent || '').trim();
+                if (!txt) continue;
+                texts.push(txt);
+              }
+            }
+            return texts.join(' | ');
+          };
           for (const s of selectors) {
             for (const el of document.querySelectorAll(s)) {
               nodes.push(el);
@@ -303,6 +324,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
               el.querySelector('img')?.getAttribute('data-src') ||
               ''
             ).trim(),
+            stockText: collectStockText(el),
           }));
         }
         """
@@ -374,7 +396,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite" if is_favorite else source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_extract_stock_qty(text),
+                stock_qty=_extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
             )
         )
 
@@ -386,6 +408,27 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
         """
         () => {
           const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+          const collectStockText = (el) => {
+            if (!el) return '';
+            const candidates = [
+              '[class*="stock"]',
+              '[class*="avail"]',
+              '[class*="presence"]',
+              '[class*="amount"]',
+              '[class*="qty"]',
+              '[data-testid*="stock"]',
+              '[data-testid*="avail"]',
+            ];
+            const texts = [];
+            for (const sel of candidates) {
+              for (const node of el.querySelectorAll(sel)) {
+                const txt = norm(node.innerText || node.textContent || '');
+                if (!txt) continue;
+                texts.push(txt);
+              }
+            }
+            return texts.join(' | ');
+          };
           const root =
             document.querySelector('#js-lk-modal-inshop-detail .VV_SegmentedControl__Segment._online._active') ||
             document.querySelector('#js-lk-modal-inshop-detail .VV_SegmentedControl__Segment._online') ||
@@ -403,6 +446,7 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
               (el.querySelector('img') || {}).getAttribute?.('data-src') ||
               ''
             ),
+            stockText: collectStockText(el),
           }));
         }
         """
@@ -452,7 +496,7 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_extract_stock_qty(text),
+                stock_qty=_extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
             )
         )
 
@@ -464,6 +508,27 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
         """
         () => {
           const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+          const collectStockText = (el) => {
+            if (!el) return '';
+            const candidates = [
+              '[class*="stock"]',
+              '[class*="avail"]',
+              '[class*="presence"]',
+              '[class*="amount"]',
+              '[class*="qty"]',
+              '[data-testid*="stock"]',
+              '[data-testid*="avail"]',
+            ];
+            const texts = [];
+            for (const sel of candidates) {
+              for (const node of el.querySelectorAll(sel)) {
+                const txt = norm(node.innerText || node.textContent || '');
+                if (!txt) continue;
+                texts.push(txt);
+              }
+            }
+            return texts.join(' | ');
+          };
           const cards = Array.from(document.querySelectorAll('.lk-specials-col__lp-with-prod[data-xmlid], .lk-specials-col__lp-with-prod'));
           return cards.map((el) => ({
             xmlid: (el.getAttribute('data-xmlid') || '').trim(),
@@ -480,6 +545,7 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
               (el.querySelector('img') || {}).getAttribute?.('data-src') ||
               ''
             ),
+            stockText: collectStockText(el),
           }));
         }
         """
@@ -526,7 +592,7 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite",
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_extract_stock_qty(text),
+                stock_qty=_extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
             )
         )
         break
@@ -600,9 +666,33 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
         """
         () => {
           const norm = (s) => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
-          // Prefer the main catalog grid inside the category section.
-          // This excludes personalized sliders that can appear above the list
-          // (e.g. "6 товаров" block) and pollute the first items.
+          const collectStockText = (el) => {
+            if (!el) return '';
+            const candidates = [
+              '[class*="stock"]',
+              '[class*="avail"]',
+              '[class*="presence"]',
+              '[class*="amount"]',
+              '[class*="qty"]',
+              '[data-testid*="stock"]',
+              '[data-testid*="avail"]',
+            ];
+            const texts = [];
+            for (const sel of candidates) {
+              for (const node of el.querySelectorAll(sel)) {
+                const txt = norm(node.innerText || node.textContent || '');
+                if (!txt) continue;
+                texts.push(txt);
+              }
+            }
+            const buttonLabels = Array.from(el.querySelectorAll('button, [role="button"]'))
+              .map((node) => norm(node.getAttribute?.('aria-label') || node.innerText || ''))
+              .filter(Boolean);
+            return texts.concat(buttonLabels).join(' | ');
+          };
+            // Prefer the main catalog grid inside the category section.
+            // This excludes personalized sliders that can appear above the list
+            // (e.g. "6 товаров" block) and pollute the first items.
           let cards = Array.from(
             document.querySelectorAll('.ProductsSection .ProductCards__list .js-datalayer-catalog-list-item[data-xmlid]')
           );
@@ -637,16 +727,17 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
               priceOld,
               image,
               text: norm(el.innerText || ''),
-              addText: norm((addBtn || {}).innerText || (addBtn || {}).getAttribute?.('aria-label') || ''),
-              addClass: norm((addBtn || {}).className || ''),
-              plusClass: norm((plusBtn || {}).className || ''),
-              hasAddButton: !!addBtn,
-              hasPlusButton: !!plusBtn,
-            });
+                addText: norm((addBtn || {}).innerText || (addBtn || {}).getAttribute?.('aria-label') || ''),
+                addClass: norm((addBtn || {}).className || ''),
+                plusClass: norm((plusBtn || {}).className || ''),
+                hasAddButton: !!addBtn,
+                hasPlusButton: !!plusBtn,
+                stockText: collectStockText(el),
+              });
+            }
+            return rows;
           }
-          return rows;
-        }
-        """
+          """
     )
 
     items: list[DiscountItem] = []
@@ -726,7 +817,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
                 discount_price=discount,
                 source="vkusvill_offers_ready_food",
                 image_url=_normalize_image_url(str(row.get("image") or "")),
-                stock_qty=_extract_stock_qty(str(row.get("text") or "")),
+                stock_qty=_extract_stock_qty(f"{row.get('text') or ''} {row.get('stockText') or ''}"),
             )
         )
         if max_items > 0 and len(items) >= max_items:
