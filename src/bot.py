@@ -35,7 +35,7 @@ from telegram.ext import (
 
 from .config import Settings
 from .command_utils import command_to_args, project_root
-from .providers import BaseProvider
+from .providers import BaseProvider, ManualJsonProvider, RPACommandProvider
 from .store import StateStore
 
 LOGGER = logging.getLogger(__name__)
@@ -164,6 +164,55 @@ class VkusvillGroupBot:
     def _now_iso(self) -> str:
         return datetime.now(self.settings.timezone).isoformat(timespec="seconds")
 
+    @staticmethod
+    def _repair_mojibake(text: str) -> str:
+        raw = str(text or "")
+        if not raw:
+            return raw
+        # Common Windows mojibake pattern: UTF-8 bytes decoded as cp1251.
+        # Example: "Р›РµРЅРёРЅ..." -> "Ленин..."
+        if "Р" in raw or "С" in raw:
+            try:
+                fixed = raw.encode("cp1251").decode("utf-8")
+                return fixed
+            except Exception:
+                pass
+        return raw
+
+    def _short_collect_error(self, exc: Exception) -> str:
+        text = self._repair_mojibake(str(exc))
+        if "collect_command_failed:" in text:
+            return text.split("collect_command_failed:", 1)[1].strip()[:240]
+        if "All collect sources failed." in text:
+            # Keep only compact diagnostic tail for owner DM.
+            tail = text.split("Attempts:", 1)[-1].strip() if "Attempts:" in text else text
+            return f"all_sources_failed: {tail[:220]}"
+        return text[:240]
+
+    def _should_notify_collect_error(self, message: str, cooldown_minutes: int = 30) -> bool:
+        fingerprint = hashlib.sha1(message.encode("utf-8", errors="ignore")).hexdigest()[:16]
+        last_fp = self.store.get_meta("last_collect_error_fp") or ""
+        last_at_raw = self.store.get_meta("last_collect_error_notified_at") or ""
+        now = datetime.now(self.settings.timezone)
+
+        if fingerprint != last_fp:
+            self.store.set_meta("last_collect_error_fp", fingerprint)
+            self.store.set_meta("last_collect_error_notified_at", self._now_iso())
+            return True
+
+        try:
+            last_at = datetime.fromisoformat(last_at_raw)
+            if last_at.tzinfo is None:
+                last_at = last_at.replace(tzinfo=self.settings.timezone)
+        except Exception:
+            self.store.set_meta("last_collect_error_notified_at", self._now_iso())
+            return True
+
+        if now - last_at >= timedelta(minutes=cooldown_minutes):
+            self.store.set_meta("last_collect_error_notified_at", self._now_iso())
+            return True
+        return False
+
     def _build_command_args(self, command_template: str, out_path: Path, extra: list[str] | None = None) -> list[str]:
         cmd = (command_template or "").replace("{order_file}", str(out_path))
         cmd = os.path.expandvars(cmd)
@@ -280,14 +329,14 @@ class VkusvillGroupBot:
             ok_msg = "ok"
             if isinstance(payload, dict):
                 ok_msg = str(payload.get("message") or ok_msg)
-            return True, ok_msg
+            return True, self._repair_mojibake(ok_msg)
 
         detail = ""
         if isinstance(payload, dict):
             detail = str(payload.get("error") or payload.get("message") or payload.get("status") or "").strip()
         if not detail:
             detail = (raw or f"returncode={proc.returncode}").splitlines()[-1]
-        return False, detail[:240]
+        return False, self._repair_mojibake(detail[:240])
 
     async def _refresh_image_mirror(self, day: str) -> tuple[bool, str]:
         script_path = Path("scripts") / "build_image_mirror.py"
@@ -358,6 +407,115 @@ class VkusvillGroupBot:
         src = (source or "").lower()
         return src.startswith("vkusvill_offers_ready_food")
 
+    def _build_collect_sources(self) -> list[tuple[str, BaseProvider]]:
+        sources: list[tuple[str, BaseProvider]] = [("primary", self.provider)]
+        if self.settings.collect_failover_enabled:
+            if self.settings.fallback_rpa_command:
+                sources.append(("fallback_rpa", RPACommandProvider(self.settings.fallback_rpa_command)))
+            if self.settings.fallback_discounts_json_path:
+                sources.append(
+                    (
+                        "fallback_json",
+                        ManualJsonProvider(self.settings.fallback_discounts_json_path),
+                    )
+                )
+        return sources
+
+    @staticmethod
+    def _format_collect_attempts(attempts: list[dict]) -> str:
+        parts: list[str] = []
+        for row in attempts:
+            name = str(row.get("name") or "source")
+            status = str(row.get("status") or "unknown")
+            if status == "ok":
+                total = int(row.get("total") or 0)
+                regular = int(row.get("regular") or 0)
+                parts.append(f"{name}:ok({regular}/18, total={total})")
+            else:
+                err = str(row.get("error") or "error").splitlines()[0][:100]
+                parts.append(f"{name}:err({err})")
+        return "; ".join(parts)
+
+    async def _fetch_items_with_failover(self, now: datetime) -> tuple[list[object], dict]:
+        sources = self._build_collect_sources()
+        attempts: list[dict] = []
+        min_regular = max(1, int(self.settings.failover_min_regular_items))
+
+        selected_items: list[object] | None = None
+        selected_source = ""
+        selected_regular = -1
+        selected_total = 0
+        used_failover = False
+
+        best_items: list[object] | None = None
+        best_source = ""
+        best_regular = -1
+        best_total = 0
+
+        for idx, (source_name, provider) in enumerate(sources):
+            try:
+                items = await asyncio.to_thread(provider.fetch, now)
+                regular = self._regular_inshop_count(items)
+                total = len(items)
+                attempts.append(
+                    {
+                        "name": source_name,
+                        "status": "ok",
+                        "regular": regular,
+                        "total": total,
+                    }
+                )
+
+                if regular > best_regular or (regular == best_regular and total > best_total):
+                    best_items = items
+                    best_source = source_name
+                    best_regular = regular
+                    best_total = total
+
+                if regular >= min_regular:
+                    selected_items = items
+                    selected_source = source_name
+                    selected_regular = regular
+                    selected_total = total
+                    used_failover = idx > 0
+                    break
+            except Exception as exc:
+                attempts.append(
+                    {
+                        "name": source_name,
+                        "status": "error",
+                        "error": self._repair_mojibake(str(exc)),
+                    }
+                )
+
+        if selected_items is not None:
+            return selected_items, {
+                "selected_source": selected_source,
+                "selected_regular": selected_regular,
+                "selected_total": selected_total,
+                "used_failover": used_failover,
+                "attempts": attempts,
+                "meets_min_regular": True,
+            }
+
+        if best_items is not None:
+            meets = best_regular >= min_regular
+            if self.settings.failover_require_min_regular and not meets:
+                raise ValueError(
+                    "No source reached required regular threshold "
+                    f"({best_regular}/{min_regular}). Attempts: {self._format_collect_attempts(attempts)}"
+                )
+            return best_items, {
+                "selected_source": best_source,
+                "selected_regular": best_regular,
+                "selected_total": best_total,
+                "used_failover": best_source != "primary",
+                "attempts": attempts,
+                "meets_min_regular": meets,
+            }
+
+        raise ValueError(f"All collect sources failed. Attempts: {self._format_collect_attempts(attempts)}")
+
     def _mini_groups(self, items: list[object]) -> tuple[list[dict], list[object], list[object]]:
         favorites: list[object] = []
         regular: list[object] = []
@@ -383,6 +541,72 @@ class VkusvillGroupBot:
                 }
             )
         return groups, favorites, ready_food
+
+    @staticmethod
+    def _compact_image_url_for_webapp(url: str) -> str:
+        raw = (url or "").strip()
+        if not raw:
+            return ""
+        base = raw.split("?", 1)[0]
+        prefix = "https://img.vkusvill.ru/pim/images/"
+        if base.startswith(prefix):
+            tail = base[len(prefix) :]
+            m = re.match(r"^(site/)?site_MiniWebP/([0-9a-fA-F-]{36})\.webp$", tail)
+            if m:
+                variant = "1" if m.group(1) else "0"
+                return f"vi:{variant}:{m.group(2).lower()}"
+            return f"vv:{tail}"
+        return base
+
+    def _build_public_webapp_snapshot(self, day: str, items: list[object]) -> dict:
+        groups, favorites, ready_food = self._mini_groups(items)
+        snapshot_id = self._snapshot_id(items, day)
+        regular_count = sum(len(g["items"]) for g in groups)
+
+        unique_items: list[object] = []
+        index_by_item_id: dict[str, int] = {}
+
+        def register(item: object) -> int:
+            item_id = str(item.item_id)
+            idx = index_by_item_id.get(item_id)
+            if idx is not None:
+                return idx
+            idx = len(unique_items)
+            unique_items.append(item)
+            index_by_item_id[item_id] = idx
+            return idx
+
+        group_indexes: list[list[int]] = []
+        for g in groups:
+            group_indexes.append([register(item) for item in g["items"]])
+        favorite_indexes = [register(item) for item in favorites[:1]]
+        ready_food_indexes = [register(item) for item in ready_food]
+
+        return {
+            "d": day,
+            "sid": snapshot_id,
+            "m": [
+                [
+                    str(item.item_id),
+                    str(item.name),
+                    float(item.discount_price),
+                    self._compact_image_url_for_webapp(str(getattr(item, "image_url", "") or "")),
+                ]
+                for item in unique_items
+            ],
+            "g": group_indexes,
+            "f": favorite_indexes,
+            "r": ready_food_indexes,
+            "rc": regular_count,
+            "cap": 18,
+            "generated_at": self._now_iso(),
+        }
+
+    def _write_webapp_latest_snapshot(self, day: str, items: list[object]) -> None:
+        out_path = Path("webapp") / "latest.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = self._build_public_webapp_snapshot(day, items)
+        out_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     def _build_mini_app_url(self, user_id: int | None) -> str | None:
         if not self.settings.mini_app_url:
@@ -471,6 +695,7 @@ class VkusvillGroupBot:
         query["data"] = packed
         query["enc"] = "z"
         query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
+        query["cb"] = str(int(datetime.now(self.settings.timezone).timestamp()))
         out_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
         # Safety fallback: if URL gets too long, drop image URLs and keep text mode stable.
@@ -493,13 +718,6 @@ class VkusvillGroupBot:
                 continue
             count += 1
         return count
-
-    def _open_showcase_markup(self, user_id: int | None = None) -> InlineKeyboardMarkup:
-        # Group-safe markup only. Telegram rejects web_app buttons in groups.
-        rows: list[list[InlineKeyboardButton]] = [
-            [InlineKeyboardButton("Open Showcase", callback_data="b|o|0")]
-        ]
-        return InlineKeyboardMarkup(rows)
 
     @staticmethod
     def _private_app_deeplink(bot_username: str | None) -> str | None:
@@ -601,9 +819,11 @@ class VkusvillGroupBot:
     async def collect(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
             return
-        await self._collect_impl(context.application)
-        if update.message:
+        ok = await self._collect_impl(context.application, quiet_errors_in_group=False)
+        if update.message and ok:
             await update.message.reply_text("Скидки обновлены.")
+        elif update.message:
+            await update.message.reply_text("Сбор не удался. Подробности отправил владельцу в личку.")
 
     async def mirror(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -696,12 +916,25 @@ class VkusvillGroupBot:
         self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
         self.store.set_meta("last_sessioncheck_detail", detail)
 
-        if ok:
-            await update.message.reply_text("Сессия ВкусВилл: OK.")
-        else:
-            await update.message.reply_text(f"Сессия ВкусВилл требует входа: {detail}")
+        result_text = "Сессия ВкусВилл: OK." if ok else f"Сессия ВкусВилл требует входа: {detail}"
+        chat_type = update.effective_chat.type if update.effective_chat else "private"
+        if chat_type != "private":
+            await self._send_owner(context.application, result_text)
+            await update.message.reply_text("Проверил. Результат отправил владельцу в личку.")
+            return
 
-    async def _collect_impl(self, app: Application, skip_if_full: bool = False) -> None:
+        if ok:
+            await update.message.reply_text(result_text)
+        else:
+            await update.message.reply_text(result_text)
+
+    async def _collect_impl(
+        self,
+        app: Application,
+        skip_if_full: bool = False,
+        quiet_errors_in_group: bool = True,
+        announce_success_in_group: bool = True,
+    ) -> bool:
         now = datetime.now(self.settings.timezone)
         day = now.strftime("%Y-%m-%d")
         existing = self.store.list_items(day)
@@ -713,18 +946,29 @@ class VkusvillGroupBot:
                     existing_regular_count,
                     day,
                 )
-                return
+                return True
         try:
-            items = await asyncio.to_thread(self.provider.fetch, now)
+            items, collect_meta = await self._fetch_items_with_failover(now)
         except Exception as exc:
+            short_reason = self._short_collect_error(exc)
             self.store.set_meta("last_collect_at", self._now_iso())
             self.store.set_meta("last_collect_status", "error")
-            await self._send(
-                app,
-                f"Сбор скидок не удался: {exc}. Проверь сессию ВкусВилл и настройки сборщика.",
+            self.store.set_meta("last_collect_source", "none")
+            self.store.set_meta("last_collect_attempts", short_reason[:1000])
+            if not quiet_errors_in_group:
+                await self._send(
+                    app,
+                    "Сбор скидок не удался. Детали отправлены владельцу в личку.",
+                )
+            owner_msg = (
+                "Сбор скидок не удался.\n"
+                f"Причина: {short_reason}\n"
+                "Проверь сессию ВкусВилл и fallback-настройки."
             )
+            if self._should_notify_collect_error(owner_msg):
+                await self._send_owner(app, owner_msg)
             LOGGER.exception("Collect failed")
-            return
+            return False
 
         fetched_regular_count = self._regular_inshop_count(items)
         # Guard against accidental downgrade when replacement limit is reached:
@@ -737,26 +981,81 @@ class VkusvillGroupBot:
             self.store.set_meta("last_collect_day", day)
             self.store.set_meta("last_collect_regular_count", str(existing_regular_count))
             self.store.set_meta("last_collect_total_items", str(len(existing)))
-            await self._send(
+            if announce_success_in_group:
+                await self._send(
+                    app,
+                    (
+                        f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
+                        f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
+                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                    ),
+                )
+            else:
+                await self._send_owner(
+                    app,
+                    (
+                        f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
+                        f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
+                        f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                    ),
+                )
+            return True
+
+        # Additional downgrade protection:
+        # keep richer same-day snapshot when a new collect brings fewer regular slots.
+        if existing_regular_count > fetched_regular_count and existing_regular_count > 0:
+            fresh = self.store.upsert_items(day, [x.to_row() for x in items])
+            removed = 0
+            all_items = self.store.list_items(day)
+            regular_count = self._regular_inshop_count(all_items)
+            favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
+            ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
+            self.store.set_meta("last_collect_at", self._now_iso())
+            self.store.set_meta("last_collect_status", "guard_keep_richer_snapshot")
+            self.store.set_meta("last_collect_day", day)
+            self.store.set_meta("last_collect_regular_count", str(regular_count))
+            self.store.set_meta("last_collect_total_items", str(len(all_items)))
+            selected_source = str(collect_meta.get("selected_source") or "primary")
+            self.store.set_meta("last_collect_source", selected_source)
+            self.store.set_meta("last_collect_attempts", self._format_collect_attempts(collect_meta.get("attempts") or []))
+            self.store.set_meta(
+                "last_collect_failover_used",
+                "true" if bool(collect_meta.get("used_failover")) else "false",
+            )
+            await self._send_owner(
                 app,
                 (
-                    f"Сбор {now.strftime('%H:%M')} пропущен защитой: "
-                    f"новый срез {fetched_regular_count}/18, сохранен предыдущий полный набор {existing_regular_count}/18. "
-                    f"В базе осталось: {len(existing)} (любимый: {existing_favorite_count}, готовая еда: {existing_ready_food_count})."
+                    "Сработала защита от деградации подборок.\n"
+                    f"Новый срез: {fetched_regular_count}/18, оставлен более полный: {existing_regular_count}/18.\n"
+                    f"Итог в базе: {len(all_items)} (любимый: {favorite_count}, готовая еда: {ready_food_count}).\n"
+                    f"Попытки: {self._format_collect_attempts(collect_meta.get('attempts') or [])}"
                 ),
             )
-            return
+            return True
 
         fresh, removed = self.store.sync_items(day, [x.to_row() for x in items])
         all_items = self.store.list_items(day)
         regular_count = self._regular_inshop_count(all_items)
         favorite_count = sum(1 for x in all_items if self._is_favorite_item(x.name, x.source))
         ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
+        try:
+            self._write_webapp_latest_snapshot(day, all_items)
+        except Exception as exc:
+            LOGGER.warning("Failed to write latest webapp snapshot: %s", exc)
         self.store.set_meta("last_collect_at", self._now_iso())
         self.store.set_meta("last_collect_status", "ok")
+        self.store.set_meta("last_collect_error_fp", "")
+        self.store.set_meta("last_collect_error_notified_at", "")
         self.store.set_meta("last_collect_day", day)
         self.store.set_meta("last_collect_regular_count", str(regular_count))
         self.store.set_meta("last_collect_total_items", str(len(all_items)))
+        selected_source = str(collect_meta.get("selected_source") or "primary")
+        self.store.set_meta("last_collect_source", selected_source)
+        self.store.set_meta("last_collect_attempts", self._format_collect_attempts(collect_meta.get("attempts") or []))
+        self.store.set_meta(
+            "last_collect_failover_used",
+            "true" if bool(collect_meta.get("used_failover")) else "false",
+        )
         mirror_ok, mirror_detail = await self._refresh_image_mirror(day)
         self.store.set_meta("last_mirror_at", self._now_iso())
         self.store.set_meta("last_mirror_status", "ok" if mirror_ok else "error")
@@ -768,19 +1067,31 @@ class VkusvillGroupBot:
             self.store.set_meta("last_publish_status", "ok" if publish_ok else "error")
             self.store.set_meta("last_publish_detail", publish_detail)
             publish_suffix = f" Публикация Pages: {publish_detail}."
-        await self._send(
-            app,
-            (
-                f"Сбор {now.strftime('%H:%M')} завершен. "
-                f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
-                f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}. "
-                f"Кэш картинок: {mirror_detail}.{publish_suffix}"
-            ),
-            reply_markup=self._open_showcase_markup(),
+        summary_text = (
+            f"Сбор {now.strftime('%H:%M')} завершен. "
+            f"В базе: {len(all_items)} (новых {len(fresh)}, удалено {removed}). "
+            f"Подборки 20%: {regular_count}/18, любимый: {favorite_count}, готовая еда: {ready_food_count}. "
+            f"Кэш картинок: {mirror_detail}.{publish_suffix}"
         )
+        await self._send_owner(app, summary_text)
+        if bool(collect_meta.get("used_failover")):
+            await self._send_owner(
+                app,
+                (
+                    "Сбор выполнен через fallback-источник.\n"
+                    f"Выбран: {selected_source}\n"
+                    f"Попытки: {self._format_collect_attempts(collect_meta.get('attempts') or [])}"
+                ),
+            )
+        return True
 
     async def scheduled_collect(self, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self._collect_impl(context.application, skip_if_full=True)
+        await self._collect_impl(
+            context.application,
+            skip_if_full=True,
+            quiet_errors_in_group=True,
+            announce_success_in_group=False,
+        )
 
     async def scheduled_sessioncheck(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         ok, detail = await self._run_session_probe()
@@ -788,21 +1099,33 @@ class VkusvillGroupBot:
         self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
         self.store.set_meta("last_sessioncheck_detail", detail)
         if not ok:
-            await self._send(
+            await self._send_owner(
                 context.application,
                 f"Проверка сессии ВкусВилл: требуется вход в Chrome-профиль ({detail}).",
             )
 
     async def shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if update.effective_user is None:
+        if update.effective_user is None or update.message is None:
+            return
+        chat_type = update.effective_chat.type if update.effective_chat else ""
+        if chat_type != "private":
+            deep_link = self._private_app_deeplink(getattr(context.bot, "username", None))
+            if deep_link:
+                await update.message.reply_text(
+                    "Старая витрина в группе отключена. Выбор делаем только через Mini App в личке.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("Открыть Mini App", url=deep_link)]]
+                    ),
+                )
+            else:
+                await update.message.reply_text("Старая витрина отключена. Открой Mini App через /app в личке.")
             return
         day = self._today()
         items = self.store.list_items(day)
         if not items:
-            if update.message:
-                await update.message.reply_text(
-                    f"Товары обновляются автоматически по расписанию: {self._collection_schedule_text()} (Europe/Moscow)."
-                )
+            await update.message.reply_text(
+                f"Товары обновляются автоматически по расписанию: {self._collection_schedule_text()} (Europe/Moscow)."
+            )
             return
 
         item = items[0]
@@ -815,11 +1138,10 @@ class VkusvillGroupBot:
             user_id=update.effective_user.id,
             total_qty=totals.get(item.item_id, 0),
         )
-        if update.message:
-            await update.message.reply_text(
-                text=text,
-                reply_markup=self._browser_keyboard(item.item_id, 0, len(items)),
-            )
+        await update.message.reply_text(
+            text=text,
+            reply_markup=self._browser_keyboard(item.item_id, 0, len(items)),
+        )
     async def app(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or update.effective_user is None:
             return
@@ -843,23 +1165,25 @@ class VkusvillGroupBot:
 
         web_url = self._build_mini_app_url(update.effective_user.id) or self.settings.mini_app_url
         keyboard_rows: list[list[KeyboardButton]] = [
-            [KeyboardButton("Запустить выбор в Mini App", web_app=WebAppInfo(url=web_url))]
+            [KeyboardButton("Открыть скидки", web_app=WebAppInfo(url=web_url))]
         ]
-        if self._user_is_owner(update.effective_user.id):
-            keyboard_rows.append([KeyboardButton(self.COLLECT_NOW_BUTTON)])
         kb = ReplyKeyboardMarkup(
             keyboard_rows,
             resize_keyboard=True,
             one_time_keyboard=True,
-            input_field_placeholder="Нажми кнопку для открытия Mini App",
+            input_field_placeholder="Открыть скидки",
         )
         await update.message.reply_text(
-            (
-                "Нажми кнопку внизу для открытия Mini App.\n"
-                "Важно: отправка выбора работает именно из этого окна."
-            ),
+            "Открой Mini App кнопкой снизу.",
             reply_markup=kb,
         )
+        if self._user_is_owner(update.effective_user.id):
+            await update.message.reply_text(
+                "Управление владельца:",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Собрать заказ сейчас", callback_data="ctl|collectnow")]]
+                ),
+            )
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -868,7 +1192,7 @@ class VkusvillGroupBot:
         if args and args[0].strip().lower() in {"open_app", "app", "miniapp"}:
             await self.app(update, context)
             return
-        await update.message.reply_text("Open Mini App with /app")
+        await self.app(update, context)
 
     async def hidekbd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -1047,6 +1371,16 @@ class VkusvillGroupBot:
         query = update.callback_query
         if query is None or query.from_user is None or query.data is None:
             return
+
+        chat_type = query.message.chat.type if query.message and query.message.chat else "private"
+        if chat_type != "private":
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            await query.answer("Витрина в группе отключена. Используй Mini App в личке.")
+            return
+
         answered = False
 
         parts = query.data.split("|")
@@ -1341,14 +1675,16 @@ class VkusvillGroupBot:
             self.store.set_meta("last_executor_status", "dry_run_skip")
             return {"ok": True, "status": "dry_run_skip"}
         if not self.settings.order_executor_command:
-            await self._send(app, "ORDER_EXECUTOR_COMMAND не задан. Автооформление пропущено.")
+            await self._send(app, "Автооформление пропущено. Детали отправлены владельцу.")
+            await self._send_owner(app, "ORDER_EXECUTOR_COMMAND не задан. Автооформление пропущено.")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "missing_command")
             return {"ok": False, "status": "missing_command"}
 
         args = self._build_command_args(self.settings.order_executor_command, out_path)
         if not args:
-            await self._send(app, "ORDER_EXECUTOR_COMMAND пустой после разбора. Автооформление пропущено.")
+            await self._send(app, "Автооформление пропущено. Детали отправлены владельцу.")
+            await self._send_owner(app, "ORDER_EXECUTOR_COMMAND пустой после разбора. Автооформление пропущено.")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "empty_command")
             return {"ok": False, "status": "empty_command"}
@@ -1365,9 +1701,9 @@ class VkusvillGroupBot:
                 not isinstance(pre_payload, dict) or bool(pre_payload.get("ok", True))
             )
             if not pre_ok:
-                await self._send(
+                await self._send_owner(
                     app,
-                    "Сессия ВкусВилл недействительна. Пробую открыть браузер для автообновления сессии...",
+                    "Сессия ВкусВилл недействительна. Пробую автообновление сессии через браузер...",
                 )
                 refresh_args = preflight_args + [
                     "--interactive-login",
@@ -1387,7 +1723,11 @@ class VkusvillGroupBot:
                     short = (refresh_raw or "session_check_failed").splitlines()[-1][:240]
                     await self._send(
                         app,
-                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({short}).",
+                        "Автооформление остановлено: не удалось подтвердить сессию ВкусВилл. Детали у владельца.",
+                    )
+                    await self._send_owner(
+                        app,
+                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({self._repair_mojibake(short)}).",
                     )
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "session_invalid")
@@ -1416,7 +1756,11 @@ class VkusvillGroupBot:
             if isinstance(payload, dict):
                 if payload.get("error"):
                     err_short = str(payload.get("error") or "").strip().splitlines()[0][:220]
-                    await self._send(app, f"Автодобавление не сработало: {err_short}\nТехлог: {log_path}")
+                    await self._send(app, "Автодобавление не сработало. Детали отправлены владельцу.")
+                    await self._send_owner(
+                        app,
+                        f"Автодобавление не сработало: {self._repair_mojibake(err_short)}\nТехлог: {log_path}",
+                    )
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "failed_error")
                     return {"ok": False, "status": "failed_error", "log_path": str(log_path)}
@@ -1428,7 +1772,8 @@ class VkusvillGroupBot:
                     if msg == "no_selected_items":
                         await self._send(app, "В заказе нет выбранных позиций.")
                     else:
-                        await self._send(app, f"Корзина обновлена. Техлог: {log_path}")
+                        await self._send(app, "Корзина обновлена.")
+                        await self._send_owner(app, f"Executor success_no_targets. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "success_no_targets")
                     return {"ok": True, "status": "success_no_targets", "log_path": str(log_path)}
@@ -1493,7 +1838,8 @@ class VkusvillGroupBot:
                     if cart_unique > 0:
                         lines.append(f"В корзине сейчас: {cart_unique} позиций, суммарное кол-во: {cart_total_qty}.")
                     lines.append(f"Техлог: {log_path}")
-                    await self._send(app, "\n".join(lines))
+                    await self._send(app, f"Корзина обновлена частично: {ok_count}/{total}. Детали отправлены владельцу.")
+                    await self._send_owner(app, "\n".join(lines))
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "partial")
                     self.store.set_meta("last_executor_ok_count", str(ok_count))
@@ -1501,17 +1847,20 @@ class VkusvillGroupBot:
                     return {"ok": False, "status": "partial", "log_path": str(log_path)}
             else:
                 if proc.returncode == 0:
-                    await self._send(app, f"Корзина обновлена. Техлог: {log_path}")
+                    await self._send(app, "Корзина обновлена.")
+                    await self._send_owner(app, f"Executor success_no_payload. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "success_no_payload")
                     return {"ok": True, "status": "success_no_payload", "log_path": str(log_path)}
                 else:
-                    await self._send(app, f"Автодобавление не сработало. Техлог: {log_path}")
+                    await self._send(app, "Автодобавление не сработало. Детали отправлены владельцу.")
+                    await self._send_owner(app, f"Executor failed_no_payload. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "failed_no_payload")
                     return {"ok": False, "status": "failed_no_payload", "log_path": str(log_path)}
         except Exception as exc:
-            await self._send(app, f"Executor FAILED: {exc}")
+            await self._send(app, "Автодобавление завершилось ошибкой. Детали отправлены владельцу.")
+            await self._send_owner(app, f"Executor FAILED: {self._repair_mojibake(str(exc))}")
             self.store.set_meta("last_executor_at", self._now_iso())
             self.store.set_meta("last_executor_status", "exception")
             return {"ok": False, "status": "exception", "error": str(exc), "log_path": str(log_path)}

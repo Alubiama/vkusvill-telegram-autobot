@@ -79,6 +79,11 @@ class Settings:
     out_retention_days: int
     auto_publish_pages: bool
     publish_pages_command: str | None
+    collect_failover_enabled: bool
+    fallback_rpa_command: str | None
+    fallback_discounts_json_path: str | None
+    failover_min_regular_items: int
+    failover_require_min_regular: bool
 
 
 def load_settings() -> Settings:
@@ -102,4 +107,9 @@ def load_settings() -> Settings:
         out_retention_days=_parse_positive_int(os.getenv("OUT_RETENTION_DAYS"), 30),
         auto_publish_pages=_parse_bool(os.getenv("AUTO_PUBLISH_PAGES"), False),
         publish_pages_command=(os.getenv("PUBLISH_PAGES_COMMAND") or "").strip() or "publish-github-pages.cmd",
+        collect_failover_enabled=_parse_bool(os.getenv("COLLECT_FAILOVER_ENABLED"), False),
+        fallback_rpa_command=(os.getenv("FALLBACK_RPA_COMMAND") or "").strip() or None,
+        fallback_discounts_json_path=(os.getenv("FALLBACK_DISCOUNTS_JSON_PATH") or "").strip() or None,
+        failover_min_regular_items=_parse_positive_int(os.getenv("FAILOVER_MIN_REGULAR_ITEMS"), 18),
+        failover_require_min_regular=_parse_bool(os.getenv("FAILOVER_REQUIRE_MIN_REGULAR"), False),
     )

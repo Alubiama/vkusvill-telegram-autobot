@@ -38,9 +38,9 @@ if errorlevel 1 (
 "%GIT_EXE%" checkout -B main
 "%GIT_EXE%" config --get user.name >nul 2>&1
 if errorlevel 1 (
-  for /f "delims=" %%l in ('"%GH%" api user -q ".login"') do set GH_LOGIN=%%l
-  "%GIT_EXE%" config user.name %GH_LOGIN%
-  "%GIT_EXE%" config user.email %GH_LOGIN%@users.noreply.github.com
+  for /f "usebackq delims=" %%l in (`"%GH%" api user -q .login`) do set "GH_LOGIN=%%l"
+  "%GIT_EXE%" config user.name "%GH_LOGIN%"
+  "%GIT_EXE%" config user.email "%GH_LOGIN%@users.noreply.github.com"
 )
 "%GIT_EXE%" add .
 "%GIT_EXE%" commit -m "feat: Telegram showcase + Mini App + GitHub Pages deploy" >nul 2>&1
@@ -53,14 +53,14 @@ if errorlevel 1 (
 ) else (
   "%GIT_EXE%" remote get-url origin >nul 2>&1
   if errorlevel 1 (
-    for /f "delims=" %%r in ('"%GH%" repo view "%REPO_NAME%" --json url -q ".url"') do set REPO_URL=%%r
-    "%GIT_EXE%" remote add origin %REPO_URL%
+    for /f "usebackq delims=" %%r in (`"%GH%" repo view "%REPO_NAME%" --json url -q .url`) do set "REPO_URL=%%r"
+    "%GIT_EXE%" remote add origin "%REPO_URL%"
   )
   "%GIT_EXE%" push -u origin main
 )
 
 if not defined GH_LOGIN (
-  for /f "delims=" %%l in ('"%GH%" api user -q ".login"') do set GH_LOGIN=%%l
+  for /f "usebackq delims=" %%l in (`"%GH%" api user -q .login`) do set "GH_LOGIN=%%l"
 )
 
 echo Ensuring GitHub Pages is enabled...

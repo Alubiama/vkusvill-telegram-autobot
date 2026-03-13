@@ -43,7 +43,7 @@
       margin: 0 auto;
       display: grid;
       gap: 9px;
-      padding-bottom: 6px;
+      padding-bottom: calc(18px + env(safe-area-inset-bottom));
     }
     .card {
       background: var(--card);
@@ -269,8 +269,11 @@
       gap: 8px;
       position: sticky;
       bottom: 0;
-      background: linear-gradient(180deg, rgba(245, 239, 214, 0), rgba(245, 239, 214, 0.95) 25%);
+      z-index: 7;
+      background: linear-gradient(180deg, rgba(245, 239, 214, 0), rgba(245, 239, 214, 0.97) 25%);
       padding-top: 9px;
+      padding-bottom: calc(4px + env(safe-area-inset-bottom));
+      backdrop-filter: blur(6px);
     }
     .action-btn {
       border: 1px solid var(--line);
@@ -283,6 +286,7 @@
       cursor: pointer;
       min-height: 46px;
       transition: transform 120ms ease-out, border-color 120ms ease-out;
+      touch-action: manipulation;
     }
     .action-btn.primary {
       background: var(--accent);
@@ -383,14 +387,14 @@
     </section>
 
     <section class="actions">
-      <button class="action-btn primary" id="sendAllBtn">Отправить выбор</button>
-      <button class="action-btn" id="closeBtn">Закрыть</button>
+      <button class="action-btn primary" id="sendAllBtn" type="button">Отправить выбор</button>
+      <button class="action-btn" id="closeBtn" type="button">Закрыть</button>
     </section>
     <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
   </div>
 
   <script>
-    const BUILD_ID = "b-20260311-ui2";
+    const BUILD_ID = "b-20260313-resilience1";
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.expand();
@@ -508,11 +512,42 @@
 
     const params = new URLSearchParams(window.location.search);
     const hasDataParam = params.has("data");
-    const payload = (
+    let payload = (
       params.get("enc") === "z"
         ? decodeCompressedBase64UrlJson(params.get("data"))
         : decodeBase64UrlJson(params.get("data"))
     ) || decodeBase64UrlJson(params.get("data")) || {};
+
+    function hasUsefulPayloadData(value) {
+      if (!value || typeof value !== "object") return false;
+      if (Array.isArray(value.m) && value.m.length) return true;
+      if (Array.isArray(value.g) && value.g.length) return true;
+      if (Array.isArray(value.items) && value.items.length) return true;
+      if (Array.isArray(value.groups) && value.groups.length) return true;
+      return false;
+    }
+
+    function loadLatestPayloadSync() {
+      try {
+        const xhr = new XMLHttpRequest();
+        const stamp = Date.now();
+        xhr.open("GET", `./latest.json?v=${stamp}`, false);
+        xhr.setRequestHeader("Cache-Control", "no-cache");
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
+          const data = JSON.parse(xhr.responseText);
+          if (hasUsefulPayloadData(data)) return data;
+        }
+      } catch (_err) {
+        return null;
+      }
+      return null;
+    }
+
+    if (!hasUsefulPayloadData(payload)) {
+      const latestPayload = loadLatestPayloadSync();
+      if (latestPayload) payload = latestPayload;
+    }
 
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -642,7 +677,7 @@
       const parts = [`3 подборки по 6 (${regularCount}/${regularCapacity})`];
       if (favoriteItems.length) parts.push("любимый товар отдельно");
       if (regularCount < regularCapacity) {
-        parts.push("часть слотов недоступна сегодня (лимит замен)");
+        parts.push("часть слотов пока недоступна");
       }
       if (readyFoodItems.length) parts.push(`готовая еда: ${readyFoodItems.length}`);
       el.textContent = `${parts.join(", ")}.`;
@@ -674,8 +709,17 @@
       return Object.values(selected).reduce((acc, n) => acc + Number(n || 0), 0);
     }
 
+    function syncTelegramMainButton() {
+      if (!tg || !tg.MainButton) return;
+      const count = selectedCount();
+      tg.MainButton.setText(count > 0 ? `Отправить выбор (${count})` : "Отправить выбор");
+      if (count > 0) tg.MainButton.show();
+      else tg.MainButton.hide();
+    }
+
     function updateSummary() {
       document.getElementById("summary").textContent = `Выбрано: ${selectedCount()}`;
+      syncTelegramMainButton();
     }
 
     function getActiveTab() {
@@ -892,11 +936,18 @@
       }
     }
 
+    let sendInFlight = false;
     function sendAll() {
+      if (sendInFlight) return;
+      sendInFlight = true;
       const btn = document.getElementById("sendAllBtn");
       if (btn) {
         btn.disabled = true;
         btn.textContent = "Отправляем...";
+      }
+      if (tg && tg.MainButton) {
+        tg.MainButton.showProgress(false);
+        tg.MainButton.disable();
       }
       const qty = {};
       for (const item of allRealItems) {
@@ -919,11 +970,21 @@
           "err",
         );
       } finally {
+        sendInFlight = false;
         if (btn) {
           btn.disabled = false;
           btn.textContent = "Отправить выбор";
         }
+        if (tg && tg.MainButton) {
+          tg.MainButton.hideProgress();
+          tg.MainButton.enable();
+          syncTelegramMainButton();
+        }
       }
+    }
+
+    if (tg && tg.MainButton && typeof tg.MainButton.onClick === "function") {
+      tg.MainButton.onClick(sendAll);
     }
 
     document.getElementById("sendAllBtn").addEventListener("click", sendAll);

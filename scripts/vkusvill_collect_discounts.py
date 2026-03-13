@@ -722,9 +722,34 @@ def _refresh_api_status(page) -> tuple[str, str]:
     err = _normalize_ws(str(data.get("error_text", "")))
     title = _normalize_ws(str(data.get("title", "")))
     msg = err or title
-    if "до 2 раз в день" in msg.lower():
+    if _is_hard_limit_message(msg):
         return "limit", msg
     return "rejected", msg
+
+
+def _is_hard_limit_message(message: str) -> bool:
+    lowered = _normalize_ws(str(message or "")).lower()
+    if not lowered:
+        return False
+
+    # Common informative hint shown in modal even when the action is available.
+    # Do not treat this phrase alone as a hard limit.
+    soft_hint = "если товары не подошли, обновить подборку товаров можно до 2 раз в день"
+    if soft_hint in lowered:
+        hard_suffixes = ("уже", "сегодня", "исчерпан", "нельзя", "недоступно", "попробуйте завтра")
+        return any(marker in lowered for marker in hard_suffixes)
+
+    hard_markers = (
+        "лимит",
+        "уже обновляли",
+        "уже заменяли",
+        "исчерпан",
+        "попробуйте завтра",
+        "нельзя обновить",
+        "недоступно",
+        "не более 2 раз",
+    )
+    return any(marker in lowered for marker in hard_markers)
 
 
 def _click_refresh_discounts(page) -> tuple[bool, bool]:
@@ -786,19 +811,14 @@ def _click_refresh_discounts(page) -> tuple[bool, bool]:
             err = _normalize_ws(str(data.get("error_text", "")))
             title = _normalize_ws(str(data.get("title", "")))
             api_msg = err or title
-            if "до 2 раз в день" in api_msg.lower():
+            _log(f"[collector] refresh API rejected: title='{title}' error='{err}'")
+            if _is_hard_limit_message(f"{title} {err}"):
                 api_status = "limit"
             else:
                 api_status = "rejected"
     except Exception:
         api_status, api_msg = _refresh_api_status(page)
 
-    if api_status == "limit":
-        _log(f"[collector] refresh rejected by server: {api_msg}")
-        return False, True
-    if api_status == "rejected":
-        _log(f"[collector] refresh rejected by server: {api_msg or 'unknown reason'}")
-        return False, False
     if api_status == "unknown":
         _log("[collector] refresh API status unknown")
 
@@ -814,6 +834,12 @@ def _click_refresh_discounts(page) -> tuple[bool, bool]:
         _log("[collector] refresh updated cards")
     else:
         _log("[collector] refresh did not change cards")
+        if api_status == "limit":
+            _log(f"[collector] refresh rejected by server (hard limit): {api_msg}")
+            return False, True
+        if api_status == "rejected":
+            _log(f"[collector] refresh rejected by server: {api_msg or 'unknown reason'}")
+            return False, False
     return changed, False
 
 

@@ -4,6 +4,7 @@ import hashlib
 import json
 import random
 import subprocess
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,36 @@ class DiscountItem:
 def _slug(name: str) -> str:
     raw = name.strip().lower().encode("utf-8")
     return hashlib.sha1(raw).hexdigest()[:16]
+
+
+def _trim_text(value: str, max_chars: int = 280) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1] + "…"
+
+
+def _extract_process_error_hint(stdout: str, stderr: str, returncode: int) -> str:
+    merged = "\n".join(x for x in [stderr, stdout] if x).strip()
+    if not merged:
+        return f"collector exit status {returncode}"
+
+    # Prefer business-relevant hints from known collector failures.
+    patterns = [
+        r"Delivery location mismatch[^\n]*",
+        r"Failed to open Chrome profile[^\n]*",
+        r"VkusVill login required[^\n]*",
+        r"Login required[^\n]*",
+        r"not logged in[^\n]*",
+        r"State file not found[^\n]*",
+    ]
+    for pat in patterns:
+        m = re.search(pat, merged, flags=re.IGNORECASE)
+        if m:
+            return _trim_text(m.group(0))
+
+    lines = [ln.strip() for ln in merged.splitlines() if ln.strip()]
+    return _trim_text(lines[-1] if lines else f"collector exit status {returncode}")
 
 
 class BaseProvider:
@@ -125,13 +156,17 @@ class RPACommandProvider(BaseProvider):
         proc = subprocess.run(
             args,
             shell=False,
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
             cwd=str(project_root()),
             timeout=420,
         )
         stdout = (proc.stdout or "").strip()
+        stderr = (proc.stderr or "").strip()
+        if proc.returncode != 0:
+            hint = _extract_process_error_hint(stdout, stderr, proc.returncode)
+            raise ValueError(f"collect_command_failed: {hint}")
         try:
             payload = json.loads(stdout)
         except json.JSONDecodeError:
@@ -145,7 +180,6 @@ class RPACommandProvider(BaseProvider):
                     except json.JSONDecodeError:
                         continue
             if payload is None:
-                stderr = (proc.stderr or "").strip()
                 raise ValueError(
                     "RPA command output is not valid JSON. "
                     f"stdout={stdout[:500]!r}; stderr={stderr[:500]!r}"
