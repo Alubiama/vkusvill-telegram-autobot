@@ -279,6 +279,70 @@ class VkusvillGroupBot:
         self.store.update_cycle_status(day, cycle.batch_id, "closed", closed_at=self._now_iso(), paid_at=self._now_iso())
         return f"{self._batch_label(cycle.batch_id)} закрыт. Следующие выборы пойдут в новый open batch."
 
+    def _find_batch_user_by_name(self, day: str, name: str, batch_id: int | None = None) -> tuple[int | None, str | None, str | None]:
+        target_name = str(name or "").strip()
+        if not target_name:
+            return None, None, "Не удалось определить имя пользователя."
+        rows = self.store.votes_by_user(day, batch_id=batch_id)
+        exact: dict[int, str] = {}
+        folded: dict[int, str] = {}
+        for row in rows:
+            user_id = int(row.get("user_id") or 0)
+            user_name = str(row.get("user_name") or "").strip()
+            if not user_id or not user_name:
+                continue
+            if user_name == target_name:
+                exact[user_id] = user_name
+            if user_name.casefold() == target_name.casefold():
+                folded[user_id] = user_name
+        candidates = exact or folded
+        if len(candidates) == 1:
+            user_id, user_name = next(iter(candidates.items()))
+            return user_id, user_name, None
+        if len(candidates) > 1:
+            return None, None, "Нашлось несколько людей с таким именем. Лучше ответь на сообщение самого человека."
+        return None, None, f"В текущем batch не нашел пользователя «{target_name}»."
+
+    def _resolve_clearuser_target(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        day: str,
+        batch_id: int | None = None,
+    ) -> tuple[int | None, str | None, str | None]:
+        message = update.message
+        if message is None:
+            return None, None, "Нет сообщения для разбора."
+
+        reply = message.reply_to_message
+        if reply is not None:
+            reply_user = reply.from_user
+            if reply_user is not None and not bool(reply_user.is_bot):
+                display_name = " ".join(
+                    part for part in [reply_user.first_name or "", reply_user.last_name or ""] if part
+                ).strip() or reply_user.username or f"user {reply_user.id}"
+                return int(reply_user.id), display_name, None
+
+            reply_text = (reply.text or reply.caption or "").strip()
+            if reply_text:
+                first_line = reply_text.splitlines()[0].strip()
+                match = re.match(r"^(?P<name>.+?):\s*(?:batch\s*#\d+,\s*)?выбрано\b", first_line, re.IGNORECASE)
+                if match:
+                    return self._find_batch_user_by_name(day, match.group("name"), batch_id=batch_id)
+
+        if context.args:
+            raw = " ".join(context.args).strip()
+            if raw.isdigit():
+                user_id = int(raw)
+                rows = self.store.votes_by_user(day, batch_id=batch_id)
+                for row in rows:
+                    if int(row.get("user_id") or 0) == user_id:
+                        return user_id, str(row.get("user_name") or f"user {user_id}"), None
+                return None, None, f"В текущем batch нет пользователя с id {user_id}."
+            return self._find_batch_user_by_name(day, raw, batch_id=batch_id)
+
+        return None, None, "Ответь на сообщение человека или на бот-сводку командой /clearuser."
+
     @staticmethod
     def _repair_mojibake(text: str) -> str:
         raw = str(text or "")
@@ -1815,6 +1879,49 @@ class VkusvillGroupBot:
             f"Выборы в {self._batch_label(batch_id)} очищены. Можно собирать новый заказ."
         )
 
+    async def clearuser(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        day = self._today()
+        cycle = self.store.get_open_cycle(day)
+        if cycle is None:
+            await update.message.reply_text(f"За {day} сейчас нет open batch для точечной очистки.")
+            return
+
+        target_user_id, target_user_name, error = self._resolve_clearuser_target(
+            update,
+            context,
+            day,
+            batch_id=cycle.batch_id,
+        )
+        if error:
+            await update.message.reply_text(error)
+            return
+        if target_user_id is None or target_user_name is None:
+            await update.message.reply_text("Не удалось определить, чей выбор нужно снять.")
+            return
+
+        rows = [
+            row
+            for row in self.store.votes_by_user(day, batch_id=cycle.batch_id)
+            if int(row.get("user_id") or 0) == int(target_user_id) and int(row.get("qty") or 0) > 0
+        ]
+        if not rows:
+            await update.message.reply_text(
+                f"У {target_user_name} сейчас нет активного выбора в {self._batch_label(cycle.batch_id)}."
+            )
+            return
+
+        positions = len(rows)
+        qty_total = sum(int(row.get("qty") or 0) for row in rows)
+        batch_id = self.store.clear_user_votes(day, int(target_user_id), batch_id=cycle.batch_id)
+        await update.message.reply_text(
+            f"{target_user_name}: выбор в {self._batch_label(batch_id)} очищен. "
+            f"Позиций: {positions}, штук: {qty_total}."
+        )
+
     def _schedule_startup_collect_if_needed(self, app: Application) -> None:
         day = self._today()
         items, _snapshot_source = self._best_available_items(day)
@@ -2294,6 +2401,7 @@ class VkusvillGroupBot:
             "/cyclestatus - статусы batch-циклов за сегодня (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
+            "/clearuser - снять весь выбор одного человека (owner, reply)\n"
             "/clearvotes - очистить только выборы за сегодня (owner)\n"
             "/cart - сверить корзину с сегодняшними скидками (owner)\n"
             "/sessioncheck - проверка логина Chrome-профиля (owner)\n"
@@ -2344,6 +2452,7 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("closecycle", self.closecycle))
         app.add_handler(CommandHandler("cyclestatus", self.cyclestatus))
         app.add_handler(CommandHandler("resetday", self.resetday))
+        app.add_handler(CommandHandler("clearuser", self.clearuser))
         app.add_handler(CommandHandler("clearvotes", self.clearvotes))
         app.add_handler(CommandHandler("sessioncheck", self.sessioncheck))
         app.add_handler(CommandHandler("help", self.help))

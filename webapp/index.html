@@ -499,8 +499,9 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260313-ui-stage2";
+    const BUILD_ID = "b-20260313-ui-stage3";
     const READY_FOOD_PAGE_SIZE = 8;
+    const PENDING_SELECTION_KEY = "vv_pending_selection_v1";
     const HEADER_QUOTES = [
       "Вкусное само себя не выберет.",
       "Хотели по одному, а выбрали как всегда с душой.",
@@ -809,10 +810,57 @@
       el.className = `send-state ${kind}`;
       el.textContent = text;
     }
+    function clearSendState() {
+      const el = document.getElementById("sendState");
+      if (!el) return;
+      el.style.display = "none";
+      el.className = "send-state";
+      el.textContent = "";
+    }
+    function savePendingSelection(payloadOut) {
+      try {
+        localStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify({
+          saved_at: Date.now(),
+          build_id: BUILD_ID,
+          payload: payloadOut,
+        }));
+      } catch (_err) {
+        // noop
+      }
+    }
+    function loadPendingSelection() {
+      try {
+        const raw = localStorage.getItem(PENDING_SELECTION_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (_err) {
+        return null;
+      }
+    }
+    function clearPendingSelection() {
+      try {
+        localStorage.removeItem(PENDING_SELECTION_KEY);
+      } catch (_err) {
+        // noop
+      }
+    }
     const selected = {};
     for (const item of allRealItems) {
       const initial = Number((payload.your || {})[item.item_id] || 0);
       selected[item.item_id] = initial > 0 ? 1 : 0;
+    }
+
+    const pendingSelection = loadPendingSelection();
+    if (pendingSelection && pendingSelection.payload && pendingSelection.payload.day === day) {
+      const pendingQty = pendingSelection.payload.qty || {};
+      const hasLiveSelection = Object.values(selected).some((value) => Number(value || 0) > 0);
+      if (!hasLiveSelection) {
+        for (const item of allRealItems) {
+          if (!item?.item_id) continue;
+          selected[item.item_id] = Number(pendingQty[item.item_id] || 0) > 0 ? 1 : 0;
+        }
+      }
     }
 
     let activeTab = tabs.length ? tabs[0].id : "g1";
@@ -903,6 +951,7 @@
         if (!item?.item_id) continue;
         selected[item.item_id] = 0;
       }
+      clearPendingSelection();
       renderGroup();
       updateSummary();
       setSendState("Выбор очищен. Нажми «Отправить выбор», чтобы бот сохранил отмену.", "ok");
@@ -1148,6 +1197,7 @@
     function sendAll() {
       if (sendInFlight) return;
       sendInFlight = true;
+      clearSendState();
       const btn = document.getElementById("sendAllBtn");
       if (btn) {
         btn.disabled = true;
@@ -1162,12 +1212,13 @@
         qty[item.item_id] = selected[item.item_id] ? 1 : 0;
       }
       const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
+      savePendingSelection(payloadOut);
       try {
         if (!tg || typeof tg.sendData !== "function") {
           throw new Error("Telegram WebApp API unavailable");
         }
         tg.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен. Если не пришел ответ бота в чате за 3-5 секунд, открой /app заново.", "ok");
+        setSendState("Выбор отправлен. Если бот молчит 3-5 секунд, открой /app заново и нажми еще раз.", "ok");
       } catch (err) {
         const reason = (err && err.message) ? err.message : "unknown";
         const hasTg = Boolean(tg);
@@ -1191,12 +1242,26 @@
       }
     }
 
+    function bindTapAction(element, handler) {
+      if (!element) return;
+      let lastTs = 0;
+      const wrapped = (event) => {
+        const nowTs = Date.now();
+        if (nowTs - lastTs < 400) return;
+        lastTs = nowTs;
+        if (event && typeof event.preventDefault === "function") event.preventDefault();
+        handler();
+      };
+      element.addEventListener("click", wrapped);
+      element.addEventListener("touchend", wrapped, { passive: false });
+    }
+
     if (tg && tg.MainButton && typeof tg.MainButton.onClick === "function") {
       tg.MainButton.onClick(sendAll);
     }
 
-    document.getElementById("sendAllBtn").addEventListener("click", sendAll);
-    document.getElementById("clearAllBtn").addEventListener("click", clearAllSelection);
+    bindTapAction(document.getElementById("sendAllBtn"), sendAll);
+    bindTapAction(document.getElementById("clearAllBtn"), clearAllSelection);
     document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
     document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
 
@@ -1205,6 +1270,9 @@
     renderTabs();
     renderGroup();
     loadImageMirrorMap();
+    if (pendingSelection && pendingSelection.payload && pendingSelection.payload.day === day && selectedCount() > 0) {
+      setSendState("Нашел несохраненный выбор. Можно спокойно нажать «Отправить выбор» еще раз.", "ok");
+    }
   </script>
 </body>
 </html>

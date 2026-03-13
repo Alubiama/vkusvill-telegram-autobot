@@ -594,6 +594,20 @@ class StateStore:
         self.refresh_cycle_summary(day, target.batch_id)
         return target.batch_id
 
+    def clear_user_votes(self, day: str, user_id: int, batch_id: int | None = None) -> int | None:
+        self.migrate_legacy_votes(day)
+        target = self.get_cycle(day, batch_id) if batch_id is not None else self.get_open_cycle(day)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM votes WHERE day = ? AND user_id = ?", (day, int(user_id)))
+            if target is None:
+                return None
+            conn.execute(
+                "DELETE FROM batch_votes WHERE day = ? AND batch_id = ? AND user_id = ?",
+                (day, target.batch_id, int(user_id)),
+            )
+        self.refresh_cycle_summary(day, target.batch_id)
+        return target.batch_id
+
     @staticmethod
     def _serialize_items(items: list[ItemRow]) -> str:
         return json.dumps(
@@ -790,4 +804,3 @@ class StateStore:
             for row in self.list_cycle_item_results(day, batch_id)
             if int(row.requested_qty) > int(row.added_qty)
         ]
-
