@@ -290,6 +290,145 @@ class VkusvillGroupBot:
             "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый open batch."
         )
 
+    def _recover_cycles_on_startup(self) -> str | None:
+        day = self._today()
+        busy = self.store.get_latest_cycle(day, ("finalizing",))
+        if busy is None:
+            return None
+
+        rows = self.store.list_cycle_item_results(day, busy.batch_id)
+        if not rows:
+            self.store.update_cycle_status(
+                day,
+                busy.batch_id,
+                "open",
+                executor_status="recovered_restart_reopened",
+            )
+            note = f"startup_recovery: {self._batch_label(busy.batch_id)} был в finalizing без результатов, возвращен в open."
+            self.store.set_meta("startup_recovery_note", note)
+            self.store.set_meta("startup_recovery_at", self._now_iso())
+            return note
+
+        missing = self.store.get_missing_cycle_items(day, busy.batch_id)
+        next_status = "partially_added" if missing else "added_waiting_payment"
+        self.store.update_cycle_status(
+            day,
+            busy.batch_id,
+            next_status,
+            executor_status="recovered_after_restart",
+        )
+        note = (
+            f"startup_recovery: {self._batch_label(busy.batch_id)} был в finalizing, "
+            f"переведен в {self._cycle_state_human(next_status)}."
+        )
+        self.store.set_meta("startup_recovery_note", note)
+        self.store.set_meta("startup_recovery_at", self._now_iso())
+        return note
+
+    @staticmethod
+    def _finalize_outcome_human(code: str) -> str:
+        mapping = {
+            "no_open_cycle": "нет открытого batch",
+            "no_partial_cycle": "нет частично добавленного batch",
+            "empty_open_batch": "в batch нет выбранных товаров",
+            "missing_already_done": "все недостающие позиции уже добраны",
+            "session_preflight_failed": "сессия ВкусВилл не подтверждена",
+            "added_waiting_payment": "добавлен в корзину и ждет оплаты",
+            "partially_added": "частично добавлен, нужно добрать недостающее",
+        }
+        return mapping.get(code, code)
+
+    async def _preflight_finalize_session(self, app: Application, mode: str) -> bool:
+        if self.settings.dry_run or not self.settings.order_executor_command:
+            return True
+        ok, detail = await self._run_executor_session_preflight(app, allow_refresh=False)
+        self.store.set_meta("last_sessioncheck_at", self._now_iso())
+        self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
+        self.store.set_meta("last_sessioncheck_detail", detail)
+        if ok:
+            return True
+        action = "добором недостающих" if mode == "missing" else "сборкой batch"
+        await self._send_owner(
+            app,
+            f"Остановил прогон перед {action}: сессия ВкусВилл не подтверждена ({detail}).",
+        )
+        return False
+
+    async def _run_executor_session_preflight(self, app: Application, allow_refresh: bool) -> tuple[bool, str]:
+        if not self.settings.order_executor_command:
+            return True, "executor_preflight_not_configured"
+
+        dummy_out = Path(self.settings.out_dir) / "_session_preflight.json"
+        args = self._build_command_args(self.settings.order_executor_command, dummy_out, ["--check-session-only"])
+        if not args:
+            return False, "executor_preflight_args_empty"
+
+        try:
+            proc = await asyncio.to_thread(self._run_cmd_capture, args, 90)
+        except Exception as exc:
+            return False, self._repair_mojibake(str(exc))
+
+        raw = "\n".join(x for x in [(proc.stdout or "").strip(), (proc.stderr or "").strip()] if x).strip()
+        payload = self._extract_payload(raw)
+        ok = proc.returncode == 0 and (not isinstance(payload, dict) or bool(payload.get("ok", True)))
+        if ok:
+            detail = str(payload.get("message") or "ok") if isinstance(payload, dict) else "ok"
+            return True, self._repair_mojibake(detail)
+
+        detail = ""
+        if isinstance(payload, dict):
+            detail = str(payload.get("error") or payload.get("message") or payload.get("status") or "").strip()
+        if not detail:
+            detail = (raw or f"returncode={proc.returncode}").splitlines()[-1]
+
+        if not allow_refresh:
+            return False, self._repair_mojibake(detail[:240])
+
+        refresh_args = args + [
+            "--interactive-login",
+            "--interactive-login-wait-sec",
+            "180",
+            "--no-headless",
+        ]
+        try:
+            refreshed = await asyncio.to_thread(self._run_cmd_capture, refresh_args, 240)
+        except Exception as exc:
+            return False, self._repair_mojibake(str(exc))
+        refresh_raw = "\n".join(
+            x for x in [(refreshed.stdout or "").strip(), (refreshed.stderr or "").strip()] if x
+        ).strip()
+        refresh_payload = self._extract_payload(refresh_raw)
+        refresh_ok = refreshed.returncode == 0 and (
+            not isinstance(refresh_payload, dict) or bool(refresh_payload.get("ok", True))
+        )
+        if refresh_ok:
+            refresh_detail = str(refresh_payload.get("message") or "ok") if isinstance(refresh_payload, dict) else "ok"
+            return True, self._repair_mojibake(refresh_detail)
+        refresh_detail = ""
+        if isinstance(refresh_payload, dict):
+            refresh_detail = str(
+                refresh_payload.get("error") or refresh_payload.get("message") or refresh_payload.get("status") or ""
+            ).strip()
+        if not refresh_detail:
+            refresh_detail = (refresh_raw or f"returncode={refreshed.returncode}").splitlines()[-1]
+        return False, self._repair_mojibake(refresh_detail[:240])
+
+    def _webapp_build_id(self) -> str:
+        cached = (self.store.get_meta("webapp_build_id") or "").strip()
+        if cached:
+            return cached
+        try:
+            raw = (Path("webapp") / "index.html").read_text(encoding="utf-8")
+            match = re.search(r'const BUILD_ID = "([^"]+)"', raw)
+            if match:
+                build_id = match.group(1).strip()
+                if build_id:
+                    self.store.set_meta("webapp_build_id", build_id)
+                    return build_id
+        except Exception:
+            pass
+        return "unknown"
+
     def _find_batch_user_by_name(self, day: str, name: str, batch_id: int | None = None) -> tuple[int | None, str | None, str | None]:
         target_name = str(name or "").strip()
         if not target_name:
@@ -922,6 +1061,8 @@ class VkusvillGroupBot:
         query["enc"] = "z"
         query["v"] = datetime.now(self.settings.timezone).strftime("%Y%m%d%H%M%S")
         query["cb"] = str(int(datetime.now(self.settings.timezone).timestamp()))
+        query["ui"] = self._webapp_build_id()
+        query["sid"] = snapshot_id
         out_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
         # Safety fallback: if URL gets too long, drop image URLs and keep text mode stable.
@@ -938,6 +1079,8 @@ class VkusvillGroupBot:
                 for item in unique_items
             ]
             query["data"] = _pack(compact_payload)
+            query["ui"] = self._webapp_build_id()
+            query["sid"] = snapshot_id
             out_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
         return out_url
@@ -1562,7 +1705,7 @@ class VkusvillGroupBot:
             batch_id = self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
             self._trace_webapp(f"single_choice_saved item_id={item_id} qty={max(0, qty)}")
             await update.message.reply_text(
-                f"Сохранено в {self._batch_label(batch_id)}: {items_by_id[item_id].name} -> {max(0, qty)}"
+                f"Выбор принят в {self._batch_label(batch_id)}: {items_by_id[item_id].name} -> {max(0, qty)}"
             )
             return
 
@@ -1627,11 +1770,11 @@ class VkusvillGroupBot:
             self._trace_webapp(f"all_choices_saved selected={selected_positive} touched={touched}")
             if snapshot_mismatch:
                 msg = (
-                    f"Сохранено в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched}). "
+                    f"Выбор принят в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched}). "
                     "Часть позиций могла измениться после обновления, это нормально."
                 )
             else:
-                msg = f"Сохранено в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched})."
+                msg = f"Выбор принят в {self._batch_label(batch_id)}: {selected_positive} товаров (обновлено {touched})."
             if selected_positive == 0:
                 msg = f"Выбор очищен в {self._batch_label(batch_id)}. Сейчас у тебя нет активных товаров."
             if selected_preview:
@@ -2026,9 +2169,16 @@ class VkusvillGroupBot:
                 await self._send_owner(app, f"{self._batch_label(busy.batch_id)} уже в статусе finalizing.")
                 return
 
+            if not await self._preflight_finalize_session(app, mode):
+                self.store.set_meta("last_finalize_outcome", "session_preflight_failed")
+                self.store.set_meta("last_finalize_outcome_at", self._now_iso())
+                return
+
             if mode == "missing":
                 cycle = self._partial_cycle(day)
                 if cycle is None:
+                    self.store.set_meta("last_finalize_outcome", "no_partial_cycle")
+                    self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                     await self._send_owner(app, "Нет batch со статусом «частично добавлен».")
                     return
                 payload = self._build_final_payload(day, cycle.batch_id, only_missing=True)
@@ -2036,6 +2186,8 @@ class VkusvillGroupBot:
                 cycle = self._current_open_cycle(day)
                 if cycle is None:
                     waiting = self._waiting_payment_cycle(day)
+                    self.store.set_meta("last_finalize_outcome", "no_open_cycle")
+                    self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                     if waiting is not None:
                         await self._send_owner(
                             app,
@@ -2070,11 +2222,15 @@ class VkusvillGroupBot:
                         out_path=str(out_path),
                         backup_path=str(backup_path),
                     )
+                    self.store.set_meta("last_finalize_outcome", "missing_already_done")
+                    self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                     await self._send_owner(
                         app,
                         f"У {self._batch_label(cycle.batch_id)} больше нет недостающих позиций. Он ждет оплаты.",
                     )
                 else:
+                    self.store.set_meta("last_finalize_outcome", "empty_open_batch")
+                    self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                     await self._send(app, f"{self._batch_label(cycle.batch_id)}: никто не выбрал товары.")
                 return
 
@@ -2121,6 +2277,8 @@ class VkusvillGroupBot:
                     "added_waiting_payment",
                     executor_status=str(exec_result.get("status") or "success"),
                 )
+                self.store.set_meta("last_finalize_outcome", "added_waiting_payment")
+                self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                 await self._send(app, f"{self._batch_label(cycle.batch_id)} добавлен в корзину и ждет оплаты.")
             else:
                 self.store.update_cycle_status(
@@ -2129,6 +2287,8 @@ class VkusvillGroupBot:
                     "partially_added",
                     executor_status=str(exec_result.get("status") or "partial"),
                 )
+                self.store.set_meta("last_finalize_outcome", "partially_added")
+                self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                 await self._send(app, f"{self._batch_label(cycle.batch_id)} обработан. Если что-то не добавилось, owner доберет недостающее.")
 
     async def _run_executor_if_needed(self, app: Application, out_path: Path, day: str, batch_id: int) -> dict:
@@ -2173,37 +2333,17 @@ class VkusvillGroupBot:
 
         try:
             # Session preflight: fail fast before cart automation.
-            preflight_args = args + ["--check-session-only"]
-            preflight = await asyncio.to_thread(self._run_cmd_capture, preflight_args, 90)
-            pre_raw = "\n".join(x for x in [(preflight.stdout or "").strip(), (preflight.stderr or "").strip()] if x).strip()
-            pre_payload = self._extract_payload(pre_raw)
-            pre_ok = preflight.returncode == 0 and (
-                not isinstance(pre_payload, dict) or bool(pre_payload.get("ok", True))
-            )
+            pre_ok, pre_detail = await self._run_executor_session_preflight(app, allow_refresh=False)
             if not pre_ok:
                 await self._send_owner(
                     app,
                     "Сессия ВкусВилл недействительна. Пробую автообновление сессии через браузер...",
                 )
-                refresh_args = preflight_args + [
-                    "--interactive-login",
-                    "--interactive-login-wait-sec",
-                    "180",
-                    "--no-headless",
-                ]
-                refreshed = await asyncio.to_thread(self._run_cmd_capture, refresh_args, 240)
-                refresh_raw = "\n".join(
-                    x for x in [(refreshed.stdout or "").strip(), (refreshed.stderr or "").strip()] if x
-                ).strip()
-                refresh_payload = self._extract_payload(refresh_raw)
-                refresh_ok = refreshed.returncode == 0 and (
-                    not isinstance(refresh_payload, dict) or bool(refresh_payload.get("ok", True))
-                )
+                refresh_ok, refresh_detail = await self._run_executor_session_preflight(app, allow_refresh=True)
                 if not refresh_ok:
-                    short = (refresh_raw or "session_check_failed").splitlines()[-1][:240]
                     await self._send_owner(
                         app,
-                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({self._repair_mojibake(short)}).",
+                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({refresh_detail}).",
                     )
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "session_invalid")
@@ -2382,6 +2522,10 @@ class VkusvillGroupBot:
         last_publish_at = self.store.get_meta("last_publish_at") or "n/a"
         last_publish_status = self.store.get_meta("last_publish_status") or "n/a"
         last_publish_detail = self.store.get_meta("last_publish_detail") or "n/a"
+        last_finalize_outcome = self.store.get_meta("last_finalize_outcome") or "n/a"
+        last_finalize_outcome_at = self.store.get_meta("last_finalize_outcome_at") or "n/a"
+        startup_recovery_note = self.store.get_meta("startup_recovery_note") or "n/a"
+        startup_recovery_at = self.store.get_meta("startup_recovery_at") or "n/a"
         best_snapshot = self.store.get_best_day_snapshot(day)
         best_snapshot_text = (
             f"{best_snapshot.snapshot_id} ({best_snapshot.regular_count}/18, total={best_snapshot.total_items}, {best_snapshot.status})"
@@ -2406,6 +2550,8 @@ class VkusvillGroupBot:
             problems.append("сессия ВкусВилл требует входа")
         if last_executor_status in {"failed_error", "failed_no_payload", "exception", "session_invalid"}:
             problems.append(f"последний executor в ошибке ({last_executor_status})")
+        if open_cycle is not None and open_cycle.status == "finalizing":
+            problems.append("batch завис в finalizing")
 
         state = "HEALTHY" if not problems else "DEGRADED"
         lines = [
@@ -2425,6 +2571,8 @@ class VkusvillGroupBot:
             f"- last_mirror: status={last_mirror_status}, at={last_mirror_at}, detail={last_mirror_detail}",
             f"- last_publish: status={last_publish_status}, at={last_publish_at}, detail={last_publish_detail}",
             f"- last_executor: status={last_executor_status}, at={last_executor_at}, ok_count={last_executor_ok}/{last_executor_total}",
+            f"- last_finalize_outcome: {self._finalize_outcome_human(last_finalize_outcome)} at={last_finalize_outcome_at}",
+            f"- startup_recovery: {startup_recovery_note} at={startup_recovery_at}",
             f"- best_snapshot: {best_snapshot_text}",
         ]
         if problems:
@@ -2479,6 +2627,12 @@ class VkusvillGroupBot:
                 )
         except Exception:
             pass
+        try:
+            recovery_note = self._recover_cycles_on_startup()
+            if recovery_note:
+                LOGGER.info(recovery_note)
+        except Exception as exc:
+            LOGGER.warning("Startup cycle recovery failed: %s", exc)
 
         app.add_handler(CommandHandler("start", self.start))
         app.add_handler(CommandHandler("bind", self.bind))

@@ -634,6 +634,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
+    const urlBuildId = String(params.get("ui") || "");
     const hasDataParam = params.has("data");
     let payload = (
       params.get("enc") === "z"
@@ -667,9 +668,24 @@
       return null;
     }
 
+    const latestPayload = loadLatestPayloadSync();
     if (!hasUsefulPayloadData(payload)) {
-      const latestPayload = loadLatestPayloadSync();
       if (latestPayload) payload = latestPayload;
+    } else if (latestPayload) {
+      const payloadDay = String(payload.day || payload.d || "");
+      const latestDay = String(latestPayload.day || latestPayload.d || "");
+      const payloadGenerated = String(payload.generated_at || "");
+      const latestGenerated = String(latestPayload.generated_at || "");
+      const shouldPreferLatest =
+        payloadDay === latestDay &&
+        (
+          String(payload.snapshot_id || payload.sid || "") !== String(latestPayload.snapshot_id || latestPayload.sid || "") ||
+          (latestGenerated && payloadGenerated && latestGenerated > payloadGenerated)
+        );
+      if (shouldPreferLatest) {
+        const preservedYour = payload.your || {};
+        payload = { ...latestPayload, your: preservedYour };
+      }
     }
 
     const now = new Date();
@@ -907,7 +923,8 @@
       if (hero) {
         const count = selectedCount();
         const idx = count > 0 ? Math.min(count, HEADER_QUOTES.length - 1) : 0;
-        hero.textContent = HEADER_QUOTES[idx];
+        const freshnessNote = urlBuildId && urlBuildId !== BUILD_ID ? " Обнови Mini App, подтянулся новый экран." : "";
+        hero.textContent = `${HEADER_QUOTES[idx]}${freshnessNote}`;
       }
       syncTelegramMainButton();
     }
@@ -1235,14 +1252,14 @@
           throw new Error("Telegram WebApp API unavailable");
         }
         tg.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен. Если бот молчит 3-5 секунд, открой /app заново и нажми еще раз.", "ok");
+        setSendState("Выбор отправлен в текущий batch. Бот пришлет подтверждение с номером batch в чат.", "ok");
       } catch (err) {
         const reason = (err && err.message) ? err.message : "unknown";
         const hasTg = Boolean(tg);
         const hasSendData = Boolean(tg && typeof tg.sendData === "function");
         const initDataLen = (tg && tg.initData) ? String(tg.initData).length : 0;
         setSendState(
-          `Отправка не сработала (${reason}). hasTg=${hasTg}, hasSendData=${hasSendData}, initDataLen=${initDataLen}.`,
+          `Отправка не сработала (${reason}). Если кнопка упрямится, открой /app заново и повтори.`,
           "err",
         );
       } finally {
