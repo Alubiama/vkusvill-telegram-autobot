@@ -500,7 +500,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260315-ready-food-types1";
+    const BUILD_ID = "b-20260315-all-types1";
     const READY_FOOD_PAGE_SIZE = 8;
     const PENDING_SELECTION_KEY = "vv_pending_selection_v1";
     const HEADER_QUOTES = [
@@ -816,6 +816,21 @@
       if (!allById.has(item.item_id)) allById.set(item.item_id, item);
     }
     const allRealItems = Array.from(allById.values());
+    const sourceLabelById = new Map();
+    for (const group of groups) {
+      for (const item of group.items || []) {
+        if (!item?.item_id) continue;
+        sourceLabelById.set(item.item_id, group.title || "Подборка");
+      }
+    }
+    for (const item of favoriteItems) {
+      if (!item?.item_id) continue;
+      sourceLabelById.set(item.item_id, "Любимый");
+    }
+    for (const item of readyFoodItems) {
+      if (!item?.item_id) continue;
+      sourceLabelById.set(item.item_id, "Готовая еда");
+    }
 
     function updateOverview() {
       const el = document.getElementById("appMeta");
@@ -890,10 +905,10 @@
 
     let activeTab = tabs.length ? tabs[0].id : "g1";
     let readyFoodPage = 0;
-    let readyFoodViewMode = "discount";
-    let readyFoodTypeKey = "all";
+    let viewMode = "discount";
+    let typeKey = "all";
 
-    const READY_TYPE_DEFS = [
+    const TYPE_DEFS = [
       { key: "all", label: "Все" },
       { key: "soups", label: "Супы" },
       { key: "salads", label: "Салаты" },
@@ -909,7 +924,7 @@
       return String(value || "").toLowerCase().replace(/ё/g, "е");
     }
 
-    function detectReadyFoodType(item) {
+    function detectItemType(item) {
       const text = normalizeForType(item?.name || "");
       if (!text) return "other";
       if (/(суп|уха|борщ|харчо|лапша|бульон|рамен|солянк)/.test(text)) return "soups";
@@ -922,10 +937,10 @@
       return "other";
     }
 
-    function buildReadyFoodBuckets(items) {
-      const buckets = new Map(READY_TYPE_DEFS.map((x) => [x.key, []]));
+    function buildTypeBuckets(items) {
+      const buckets = new Map(TYPE_DEFS.map((x) => [x.key, []]));
       for (const item of items || []) {
-        const key = detectReadyFoodType(item);
+        const key = detectItemType(item);
         const target = buckets.get(key) || buckets.get("other");
         target.push(item);
       }
@@ -972,31 +987,34 @@
     }
 
     function getActiveTab() {
+      if (viewMode === "type") {
+        const buckets = buildTypeBuckets(allRealItems);
+        const activeDef = TYPE_DEFS.find((x) => x.key === typeKey) || TYPE_DEFS[0];
+        const items = typeKey === "all" ? allRealItems : (buckets.get(typeKey) || []);
+        return {
+          id: `type_${activeDef.key}`,
+          title: activeDef.label,
+          items,
+          type: "type_view",
+        };
+      }
       return tabs.find((x) => x.id === activeTab) || tabs[0] || null;
     }
 
     function getVisibleItems(tab) {
       if (!tab) return [];
+      if (tab.type === "type_view") return Array.isArray(tab.items) ? tab.items : [];
       if (tab.type !== "ready_food") return Array.isArray(tab.items) ? tab.items : [];
-      if (readyFoodViewMode === "type") {
-        const buckets = buildReadyFoodBuckets(tab.items || []);
-        return buckets.get(readyFoodTypeKey) || [];
-      }
       const start = readyFoodPage * READY_FOOD_PAGE_SIZE;
       return (tab.items || []).slice(start, start + READY_FOOD_PAGE_SIZE);
     }
 
     function getTabMeta(tab) {
       if (!tab) return "";
+      if (tab.type === "type_view") return `${tab.title} · ${tab.items.length} товаров из скидочного набора`;
       if (tab.type === "group") return `${tab.title} · ${tab.items.length} из 6 товаров`;
       if (tab.type === "favorite") return "Любимый товар дня";
       if (tab.type === "ready_food") {
-        if (readyFoodViewMode === "type") {
-          const buckets = buildReadyFoodBuckets(tab.items || []);
-          const activeList = buckets.get(readyFoodTypeKey) || [];
-          const activeDef = READY_TYPE_DEFS.find((x) => x.key === readyFoodTypeKey) || READY_TYPE_DEFS[0];
-          return `Готовая еда · вид по типу · ${activeDef.label}: ${activeList.length}`;
-        }
         const pages = Math.max(1, Math.ceil((tab.items.length || 0) / READY_FOOD_PAGE_SIZE));
         return `Готовая еда · ${tab.items.length} товаров · страница ${readyFoodPage + 1} из ${pages}`;
       }
@@ -1037,6 +1055,23 @@
     function renderTabs() {
       const root = document.getElementById("tabs");
       root.innerHTML = "";
+      if (viewMode === "type") {
+        const buckets = buildTypeBuckets(allRealItems);
+        const defs = TYPE_DEFS.filter((x) => x.key === "all" || (buckets.get(x.key) || []).length > 0);
+        for (const def of defs) {
+          const count = def.key === "all" ? allRealItems.length : (buckets.get(def.key) || []).length;
+          const btn = document.createElement("button");
+          btn.className = `tab${def.key === typeKey ? " active" : ""}`;
+          btn.textContent = `${def.label} ${count}`;
+          btn.addEventListener("click", () => {
+            typeKey = def.key;
+            renderTabs();
+            renderGroup();
+          });
+          root.appendChild(btn);
+        }
+        return;
+      }
       const labels = { g1: "1", g2: "2", g3: "3", favorite: "Любимый", ready_food: "Еда" };
       for (const tab of tabs) {
         const btn = document.createElement("button");
@@ -1047,7 +1082,6 @@
           activeTab = tab.id;
           if (tab.type === "ready_food") {
             readyFoodPage = 0;
-            readyFoodTypeKey = "all";
           }
           renderTabs();
           renderGroup();
@@ -1060,7 +1094,7 @@
       const root = document.getElementById("viewTabs");
       if (!root) return;
       root.innerHTML = "";
-      if (!tab || tab.type !== "ready_food") {
+      if (!allRealItems.length) {
         root.style.display = "none";
         return;
       }
@@ -1071,14 +1105,15 @@
       ];
       for (const def of defs) {
         const btn = document.createElement("button");
-        btn.className = `sub-tab${readyFoodViewMode === def.key ? " active" : ""}`;
+        btn.className = `sub-tab${viewMode === def.key ? " active" : ""}`;
         btn.textContent = def.label;
         btn.addEventListener("click", () => {
-          readyFoodViewMode = def.key;
+          viewMode = def.key;
           readyFoodPage = 0;
-          readyFoodTypeKey = "all";
-          renderViewTabs(tab);
-          renderSubTabs(tab);
+          typeKey = "all";
+          renderTabs();
+          renderViewTabs(getActiveTab());
+          renderSubTabs(getActiveTab());
           renderGroup();
         });
         root.appendChild(btn);
@@ -1089,28 +1124,8 @@
       const root = document.getElementById("subTabs");
       if (!root) return;
       root.innerHTML = "";
-      if (!tab || tab.type !== "ready_food") {
+      if (!tab || tab.type !== "ready_food" || viewMode !== "discount") {
         root.style.display = "none";
-        return;
-      }
-      if (readyFoodViewMode === "type") {
-        const buckets = buildReadyFoodBuckets(tab.items || []);
-        const defs = READY_TYPE_DEFS.filter((x) => x.key === "all" || (buckets.get(x.key) || []).length > 0);
-        root.style.display = "flex";
-        for (const def of defs) {
-          const count = def.key === "all"
-            ? (tab.items || []).length
-            : (buckets.get(def.key) || []).length;
-          const btn = document.createElement("button");
-          btn.className = `sub-tab${def.key === readyFoodTypeKey ? " active" : ""}`;
-          btn.textContent = def.key === "all" ? `${def.label} ${count}` : `${def.label} ${count}`;
-          btn.addEventListener("click", () => {
-            readyFoodTypeKey = def.key;
-            renderSubTabs(tab);
-            renderGroup();
-          });
-          root.appendChild(btn);
-        }
         return;
       }
       if (tab.items.length <= READY_FOOD_PAGE_SIZE) {
@@ -1142,6 +1157,13 @@
       const src = String(item.source || "").toLowerCase();
       const isFavorite = src.includes("favorite") || src.includes("fav") || String(item.item_id || "").startsWith("fav_");
       const isReadyFood = src.startsWith("vkusvill_offers_ready_food");
+      const sourceBaseLabel = sourceLabelById.get(item.item_id)
+        || (isFavorite ? "Любимый" : isReadyFood ? "Готовая еда" : "Подборка");
+      const sourceLabel = sourceBaseLabel === "Любимый"
+        ? "❤️ Любимый"
+        : sourceBaseLabel === "Готовая еда"
+          ? "🍱 Готовая еда"
+          : `🏷️ ${sourceBaseLabel}`;
       if (isFavorite || isReadyFood) {
         const meta = document.createElement("div");
         meta.className = "item-meta";
@@ -1151,7 +1173,7 @@
         right.className = "item-meta-side";
         const tag = document.createElement("span");
         tag.className = "tag";
-        tag.textContent = isFavorite ? "❤️ Любимый" : "🍱 Готовая еда";
+        tag.textContent = sourceLabel;
         left.appendChild(tag);
         if (isSelected) {
           const mark = document.createElement("span");
@@ -1172,7 +1194,25 @@
         const mark = document.createElement("span");
         mark.className = "selected-mark";
         mark.textContent = "✓ Выбрано";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = sourceLabel;
+        left.appendChild(tag);
         right.appendChild(mark);
+        meta.appendChild(left);
+        meta.appendChild(right);
+        wrap.appendChild(meta);
+      } else if (viewMode === "type") {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = sourceLabel;
+        left.appendChild(tag);
         meta.appendChild(left);
         meta.appendChild(right);
         wrap.appendChild(meta);
@@ -1289,8 +1329,8 @@
       titleEl.textContent = tab.title;
       subEl.textContent = tab.type === "group"
         ? "Выбери то, что тебе подходит"
-        : tab.type === "ready_food" && readyFoodViewMode === "type"
-          ? "Смотри готовую еду по типам и отмечай нужное"
+        : tab.type === "type_view"
+          ? "Смотри весь скидочный набор по типам блюд и отмечай нужное"
           : "Нажми на нужные товары и отправь выбор";
       if (metaEl) metaEl.textContent = getTabMeta(tab);
       const visibleItems = getVisibleItems(tab);
