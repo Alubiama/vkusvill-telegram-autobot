@@ -474,6 +474,7 @@
       <div class="section-title">Что можно выбрать</div>
       <div id="tabs" class="tabs"></div>
       <div id="tabMeta" class="section-sub tab-meta"></div>
+      <div id="viewTabs" class="tabs sub-tabs" style="display:none"></div>
       <div id="subTabs" class="tabs sub-tabs" style="display:none"></div>
     </section>
 
@@ -499,7 +500,7 @@
   </div>
 
   <script>
-    const BUILD_ID = "b-20260313-ui-stage4";
+    const BUILD_ID = "b-20260315-ready-food-types1";
     const READY_FOOD_PAGE_SIZE = 8;
     const PENDING_SELECTION_KEY = "vv_pending_selection_v1";
     const HEADER_QUOTES = [
@@ -889,6 +890,47 @@
 
     let activeTab = tabs.length ? tabs[0].id : "g1";
     let readyFoodPage = 0;
+    let readyFoodViewMode = "discount";
+    let readyFoodTypeKey = "all";
+
+    const READY_TYPE_DEFS = [
+      { key: "all", label: "Все" },
+      { key: "soups", label: "Супы" },
+      { key: "salads", label: "Салаты" },
+      { key: "mains", label: "Второе" },
+      { key: "sandwiches", label: "Сэндвичи" },
+      { key: "rolls", label: "Роллы" },
+      { key: "desserts", label: "Сладкое" },
+      { key: "drinks", label: "Напитки" },
+      { key: "other", label: "Другое" },
+    ];
+
+    function normalizeForType(value) {
+      return String(value || "").toLowerCase().replace(/ё/g, "е");
+    }
+
+    function detectReadyFoodType(item) {
+      const text = normalizeForType(item?.name || "");
+      if (!text) return "other";
+      if (/(суп|уха|борщ|харчо|лапша|бульон|рамен|солянк)/.test(text)) return "soups";
+      if (/(салат|винегрет|цезар|поке|коул слоу|свежест)/.test(text)) return "salads";
+      if (/(сэндвич|сандвич|сандочи|чиабатт|бургер|шаурм|ролл с куриц|ролл с тунцом)/.test(text)) return "sandwiches";
+      if (/(ролл|суши|маки|филадельф|калифорни|абури|темпур)/.test(text)) return "rolls";
+      if (/(тарталет|сырник|чизкейк|тирамису|пирож|десерт|торт|пломбир|морожен|эклер|запеканк.*творож)/.test(text)) return "desserts";
+      if (/(напиток|лимонад|морс|сок|кофе|чай|смузи|мохито|кола|вода)/.test(text)) return "drinks";
+      if (/(паста|пенне|гречк|рис|котлет|фрикадель|филе|говядин|куриц|пюре|зраз|карбонар|картоф|комбо|ежик)/.test(text)) return "mains";
+      return "other";
+    }
+
+    function buildReadyFoodBuckets(items) {
+      const buckets = new Map(READY_TYPE_DEFS.map((x) => [x.key, []]));
+      for (const item of items || []) {
+        const key = detectReadyFoodType(item);
+        const target = buckets.get(key) || buckets.get("other");
+        target.push(item);
+      }
+      return buckets;
+    }
 
     function rub(value) {
       const n = Number(value || 0);
@@ -936,6 +978,10 @@
     function getVisibleItems(tab) {
       if (!tab) return [];
       if (tab.type !== "ready_food") return Array.isArray(tab.items) ? tab.items : [];
+      if (readyFoodViewMode === "type") {
+        const buckets = buildReadyFoodBuckets(tab.items || []);
+        return buckets.get(readyFoodTypeKey) || [];
+      }
       const start = readyFoodPage * READY_FOOD_PAGE_SIZE;
       return (tab.items || []).slice(start, start + READY_FOOD_PAGE_SIZE);
     }
@@ -945,6 +991,12 @@
       if (tab.type === "group") return `${tab.title} · ${tab.items.length} из 6 товаров`;
       if (tab.type === "favorite") return "Любимый товар дня";
       if (tab.type === "ready_food") {
+        if (readyFoodViewMode === "type") {
+          const buckets = buildReadyFoodBuckets(tab.items || []);
+          const activeList = buckets.get(readyFoodTypeKey) || [];
+          const activeDef = READY_TYPE_DEFS.find((x) => x.key === readyFoodTypeKey) || READY_TYPE_DEFS[0];
+          return `Готовая еда · вид по типу · ${activeDef.label}: ${activeList.length}`;
+        }
         const pages = Math.max(1, Math.ceil((tab.items.length || 0) / READY_FOOD_PAGE_SIZE));
         return `Готовая еда · ${tab.items.length} товаров · страница ${readyFoodPage + 1} из ${pages}`;
       }
@@ -993,8 +1045,40 @@
         btn.textContent = tab.type === "ready_food" ? `${label} ${tab.items.length}` : label;
         btn.addEventListener("click", () => {
           activeTab = tab.id;
-          if (tab.type === "ready_food") readyFoodPage = 0;
+          if (tab.type === "ready_food") {
+            readyFoodPage = 0;
+            readyFoodTypeKey = "all";
+          }
           renderTabs();
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function renderViewTabs(tab) {
+      const root = document.getElementById("viewTabs");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!tab || tab.type !== "ready_food") {
+        root.style.display = "none";
+        return;
+      }
+      root.style.display = "flex";
+      const defs = [
+        { key: "discount", label: "По скидкам" },
+        { key: "type", label: "По типу" },
+      ];
+      for (const def of defs) {
+        const btn = document.createElement("button");
+        btn.className = `sub-tab${readyFoodViewMode === def.key ? " active" : ""}`;
+        btn.textContent = def.label;
+        btn.addEventListener("click", () => {
+          readyFoodViewMode = def.key;
+          readyFoodPage = 0;
+          readyFoodTypeKey = "all";
+          renderViewTabs(tab);
+          renderSubTabs(tab);
           renderGroup();
         });
         root.appendChild(btn);
@@ -1005,7 +1089,31 @@
       const root = document.getElementById("subTabs");
       if (!root) return;
       root.innerHTML = "";
-      if (!tab || tab.type !== "ready_food" || tab.items.length <= READY_FOOD_PAGE_SIZE) {
+      if (!tab || tab.type !== "ready_food") {
+        root.style.display = "none";
+        return;
+      }
+      if (readyFoodViewMode === "type") {
+        const buckets = buildReadyFoodBuckets(tab.items || []);
+        const defs = READY_TYPE_DEFS.filter((x) => x.key === "all" || (buckets.get(x.key) || []).length > 0);
+        root.style.display = "flex";
+        for (const def of defs) {
+          const count = def.key === "all"
+            ? (tab.items || []).length
+            : (buckets.get(def.key) || []).length;
+          const btn = document.createElement("button");
+          btn.className = `sub-tab${def.key === readyFoodTypeKey ? " active" : ""}`;
+          btn.textContent = def.key === "all" ? `${def.label} ${count}` : `${def.label} ${count}`;
+          btn.addEventListener("click", () => {
+            readyFoodTypeKey = def.key;
+            renderSubTabs(tab);
+            renderGroup();
+          });
+          root.appendChild(btn);
+        }
+        return;
+      }
+      if (tab.items.length <= READY_FOOD_PAGE_SIZE) {
         root.style.display = "none";
         return;
       }
@@ -1173,6 +1281,7 @@
           empty.innerHTML = "Пока здесь пусто.<br/>Попробуй открыть Mini App еще раз.";
         }
         itemsEl.appendChild(empty);
+        renderViewTabs(null);
         renderSubTabs(null);
         return;
       }
@@ -1180,9 +1289,12 @@
       titleEl.textContent = tab.title;
       subEl.textContent = tab.type === "group"
         ? "Выбери то, что тебе подходит"
-        : "Нажми на нужные товары и отправь выбор";
+        : tab.type === "ready_food" && readyFoodViewMode === "type"
+          ? "Смотри готовую еду по типам и отмечай нужное"
+          : "Нажми на нужные товары и отправь выбор";
       if (metaEl) metaEl.textContent = getTabMeta(tab);
       const visibleItems = getVisibleItems(tab);
+      renderViewTabs(tab);
       renderSubTabs(tab);
 
       if (toolsEl) {
