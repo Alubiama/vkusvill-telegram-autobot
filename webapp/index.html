@@ -1168,9 +1168,9 @@
         const empty = document.createElement("div");
         empty.className = "empty";
         if (!hasDataParam) {
-          empty.innerHTML = "Здесь нет данных по товарам.<br/>Открой Mini App через команду /app в боте.";
+          empty.innerHTML = "Сегодняшние товары еще не подтянулись.<br/>Открой /app еще раз чуть позже.";
         } else {
-          empty.innerHTML = "Пока нет товаров на сегодня.<br/>Попробуй открыть Mini App чуть позже.";
+          empty.innerHTML = "Пока здесь пусто.<br/>Попробуй открыть Mini App еще раз.";
         }
         itemsEl.appendChild(empty);
         renderSubTabs(null);
@@ -1200,8 +1200,8 @@
         const empty = document.createElement("div");
         empty.className = "empty";
         empty.innerHTML = tab.type === "group"
-          ? "Эта подборка еще не обновилась.<div class=\"soft-note\">Остальные товары появятся после следующего обновления.</div>"
-          : "Здесь пока нет доступных товаров.";
+          ? "Эта подборка еще не открылась полностью.<div class=\"soft-note\">Остальные товары подтянутся после следующего обновления.</div>"
+          : "Сейчас в этом разделе ничего не показываем.";
         itemsEl.appendChild(empty);
         return;
       }
@@ -1255,9 +1255,6 @@
         setSendState("Выбор отправлен в текущий batch. Бот пришлет подтверждение с номером batch в чат.", "ok");
       } catch (err) {
         const reason = (err && err.message) ? err.message : "unknown";
-        const hasTg = Boolean(tg);
-        const hasSendData = Boolean(tg && typeof tg.sendData === "function");
-        const initDataLen = (tg && tg.initData) ? String(tg.initData).length : 0;
         setSendState(
           `Отправка не сработала (${reason}). Если кнопка упрямится, открой /app заново и повтори.`,
           "err",

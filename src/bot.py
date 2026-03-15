@@ -1676,7 +1676,7 @@ class VkusvillGroupBot:
             payload = json.loads(wad.data)
         except json.JSONDecodeError:
             self._trace_webapp("json_decode_error")
-            await update.message.reply_text("Mini App payload parse error.")
+            await update.message.reply_text("Не смог разобрать ответ Mini App. Просто открой /app заново и повтори.")
             return
 
         day = self._today()
@@ -1700,7 +1700,7 @@ class VkusvillGroupBot:
                 return
             if item_id not in items_by_id:
                 self._trace_webapp(f"single_choice_not_found item_id={item_id}")
-                await update.message.reply_text("Item not found for today.")
+                await update.message.reply_text("Этот товар уже обновился и исчез из сегодняшнего набора. Открой /app заново.")
                 return
             batch_id = self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
             self._trace_webapp(f"single_choice_saved item_id={item_id} qty={max(0, qty)}")
@@ -1799,7 +1799,7 @@ class VkusvillGroupBot:
             return
 
         self._trace_webapp(f"unknown_type type={ptype}")
-        await update.message.reply_text("Unknown Mini App payload type.")
+        await update.message.reply_text("Mini App прислал незнакомый формат. Открой /app заново и попробуй еще раз.")
 
     async def on_browser(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -2533,29 +2533,37 @@ class VkusvillGroupBot:
             else "n/a"
         )
 
-        problems: list[str] = []
+        critical: list[str] = []
+        warnings: list[str] = []
         if bound_chat is None:
-            problems.append("чат не привязан (/bind)")
+            critical.append("чат не привязан (/bind)")
         if owner_id is None:
-            problems.append("не задан owner (/setowner)")
+            critical.append("не задан owner (/setowner)")
         if not has_rpa:
-            problems.append("не задан RPA_COMMAND")
+            critical.append("не задан RPA_COMMAND")
         if not has_executor and not self.settings.dry_run:
-            problems.append("не задан ORDER_EXECUTOR_COMMAND")
+            critical.append("не задан ORDER_EXECUTOR_COMMAND")
         if regular_count < 6:
-            problems.append("мало данных в подборках (меньше 6 товаров)")
+            critical.append("мало данных в подборках (меньше 6 товаров)")
+        elif regular_count < 18:
+            warnings.append(f"подборки еще не полные ({regular_count}/18)")
         if last_collect_status == "error":
-            problems.append("последний collect завершился ошибкой")
+            critical.append("последний collect завершился ошибкой")
         if last_sessioncheck_status == "error":
-            problems.append("сессия ВкусВилл требует входа")
+            warnings.append("сессия ВкусВилл требует внимания")
         if last_executor_status in {"failed_error", "failed_no_payload", "exception", "session_invalid"}:
-            problems.append(f"последний executor в ошибке ({last_executor_status})")
+            warnings.append(f"последний executor в ошибке ({last_executor_status})")
         if open_cycle is not None and open_cycle.status == "finalizing":
-            problems.append("batch завис в finalizing")
+            critical.append("batch завис в finalizing")
 
-        state = "HEALTHY" if not problems else "DEGRADED"
+        if critical:
+            state = "ТРЕБУЕТ ВНИМАНИЯ"
+        elif warnings:
+            state = "РАБОТАЕТ, НО ЕСТЬ ПРЕДУПРЕЖДЕНИЯ"
+        else:
+            state = "ВСЕ НОРМ"
         lines = [
-            f"Health {day}: {state}",
+            f"Состояние на {day}: {state}",
             f"- chat_id: {bound_chat}",
             f"- owner_id: {owner_id}",
             f"- provider: {self.settings.provider}",
@@ -2575,9 +2583,12 @@ class VkusvillGroupBot:
             f"- startup_recovery: {startup_recovery_note} at={startup_recovery_at}",
             f"- best_snapshot: {best_snapshot_text}",
         ]
-        if problems:
-            lines.append("- issues:")
-            lines.extend([f"  * {p}" for p in problems])
+        if critical:
+            lines.append("- критично:")
+            lines.extend([f"  * {p}" for p in critical])
+        if warnings:
+            lines.append("- предупреждения:")
+            lines.extend([f"  * {p}" for p in warnings])
         await update.message.reply_text("\n".join(lines))
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
