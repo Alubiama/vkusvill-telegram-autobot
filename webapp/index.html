@@ -137,64 +137,6 @@
       border-color: #c6dccd;
       color: #356246;
     }
-    .quick-guide {
-      padding: 12px;
-    }
-    .guide-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .guide-badge {
-      border: 1px solid #c7d9c9;
-      border-radius: 999px;
-      padding: 8px 10px;
-      font-size: 12px;
-      font-weight: 800;
-      background: #f8fcf7;
-      color: #24503a;
-      white-space: nowrap;
-    }
-    .guide-list {
-      display: grid;
-      gap: 8px;
-    }
-    .guide-step {
-      display: grid;
-      grid-template-columns: 28px minmax(0, 1fr);
-      gap: 10px;
-      align-items: start;
-      padding: 9px 10px;
-      border-radius: 14px;
-      background: #fafdf8;
-      border: 1px solid var(--line-soft);
-    }
-    .guide-num {
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: #e7f4ea;
-      color: #1d8c55;
-      font-size: 12px;
-      font-weight: 900;
-      line-height: 1;
-    }
-    .guide-step-title {
-      font-size: 13px;
-      font-weight: 800;
-      line-height: 1.25;
-      margin-bottom: 2px;
-    }
-    .guide-step-copy {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-    }
     .section-title {
       font-size: 18px;
       font-weight: 800;
@@ -606,39 +548,6 @@
         <div class="round-sub" id="roundStatusSub">Можно выбирать товары.</div>
       </div>
       <div class="round-badge" id="roundStatusBadge">Готово</div>
-    </section>
-
-    <section class="card quick-guide" aria-label="Как выбрать товары">
-      <div class="guide-head">
-        <div>
-          <div class="section-title">Как выбрать</div>
-          <div class="section-sub">Три коротких шага, чтобы быстро собрать выбор и отправить его в бот.</div>
-        </div>
-        <div class="guide-badge" id="guideBadge">Выбрано: 0</div>
-      </div>
-      <div class="guide-list">
-        <div class="guide-step">
-          <div class="guide-num">1</div>
-          <div>
-            <div class="guide-step-title">Открой удобный раздел</div>
-            <div class="guide-step-copy">Подборки, любимый товар или готовую еду можно листать отдельно.</div>
-          </div>
-        </div>
-        <div class="guide-step">
-          <div class="guide-num">2</div>
-          <div>
-            <div class="guide-step-title">Тапни по нужным карточкам</div>
-            <div class="guide-step-copy">Выбранное подсветится, а счетчик наверху сразу покажет прогресс.</div>
-          </div>
-        </div>
-        <div class="guide-step">
-          <div class="guide-num">3</div>
-          <div>
-            <div class="guide-step-title">Нажми «Отправить выбор»</div>
-            <div class="guide-step-copy">Если передумал, сначала нажми «Снять всё» или сбрось только текущий раздел.</div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <section class="card">
@@ -1245,10 +1154,6 @@
     function updateSummary() {
       const total = selectedCount();
       document.getElementById("summary").textContent = `Выбрано: ${total}`;
-      const guideBadge = document.getElementById("guideBadge");
-      if (guideBadge) {
-        guideBadge.textContent = total > 0 ? `Выбрано: ${total}` : "Пока ничего";
-      }
       const hero = document.getElementById("heroNote");
       if (hero) {
         const count = total;
