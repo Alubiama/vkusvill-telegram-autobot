@@ -1,0 +1,1813 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vkusvill Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="./vendor/pako.min.js"></script>
+  <style>
+    :root {
+      --bg0: #eff4ea;
+      --bg1: #f7efd6;
+      --bg2: #f1f6e7;
+      --card: #ffffff;
+      --ink: #193428;
+      --muted: #4d6a5b;
+      --ok: #17824f;
+      --line: #ced9cb;
+      --line-soft: #dfebe0;
+      --accent: #1d8c55;
+      --accent-soft: #ecf7ef;
+      --danger: #9f3f3f;
+      --danger-soft: #fff2f1;
+      --shadow: 0 8px 28px rgba(23, 52, 37, 0.11);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", "Segoe UI", "Tahoma", sans-serif;
+      background:
+        radial-gradient(circle at 88% -10%, #f7e4a6 0%, transparent 48%),
+        radial-gradient(circle at -20% 110%, #cce8d0 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg0), var(--bg1) 56%, var(--bg2));
+      color: var(--ink);
+      min-height: 100dvh;
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+    }
+    .shell {
+      width: 100%;
+      max-width: 388px;
+      margin: 0 auto;
+      display: grid;
+      gap: 9px;
+      padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line-soft);
+      border-radius: 18px;
+      padding: 11px;
+      box-shadow: var(--shadow);
+      animation: fade-up 180ms ease-out;
+    }
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .top-copy {
+      min-width: 0;
+      flex: 1;
+    }
+    .t1 { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .t2 { font-size: 30px; line-height: 1; font-weight: 800; margin-top: 2px; }
+    .hero-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .pill {
+      border: 1px solid #c7d9c9;
+      border-radius: 999px;
+      padding: 9px 11px;
+      font-size: 12px;
+      font-weight: 800;
+      background: linear-gradient(180deg, #f9fcf7, #eef7ef);
+      white-space: nowrap;
+      color: #173224;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+    .round-status {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+    .round-copy {
+      min-width: 0;
+      flex: 1;
+    }
+    .round-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 3px;
+    }
+    .round-sub {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .round-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f7fbf6;
+      color: #1d4d33;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+      padding: 7px 9px;
+      white-space: nowrap;
+    }
+    .round-status.open .round-badge {
+      background: #eef8f0;
+      border-color: #a7cfb3;
+      color: var(--ok);
+    }
+    .round-status.waiting .round-badge {
+      background: #fff8e8;
+      border-color: #ead29a;
+      color: #8a5a12;
+    }
+    .round-status.partial .round-badge {
+      background: #fff1ef;
+      border-color: #efc4bb;
+      color: #963c32;
+    }
+    .round-status.idle .round-badge {
+      background: #f4faf4;
+      border-color: #c6dccd;
+      color: #356246;
+    }
+    .quick-guide {
+      padding: 12px;
+    }
+    .guide-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .guide-badge {
+      border: 1px solid #c7d9c9;
+      border-radius: 999px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #f8fcf7;
+      color: #24503a;
+      white-space: nowrap;
+    }
+    .guide-list {
+      display: grid;
+      gap: 8px;
+    }
+    .guide-step {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 9px 10px;
+      border-radius: 14px;
+      background: #fafdf8;
+      border: 1px solid var(--line-soft);
+    }
+    .guide-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #e7f4ea;
+      color: #1d8c55;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .guide-step-title {
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 2px;
+    }
+    .guide-step-copy {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 3px;
+      line-height: 1.2;
+    }
+    .section-sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 7px;
+      line-height: 1.35;
+    }
+    .tab-meta {
+      margin-top: 6px;
+      margin-bottom: 0;
+      font-weight: 700;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 2px;
+    }
+    .tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 10px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+    }
+    .tab:hover {
+      transform: translateY(-1px);
+      border-color: #9bc3a8;
+    }
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .sub-tabs {
+      margin-top: 7px;
+      gap: 5px;
+    }
+    .sub-tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fcf6;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 9px;
+      cursor: pointer;
+      transition: transform 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+    }
+    .sub-tab.active {
+      background: #eef8f0;
+      color: var(--ok);
+      border-color: #9bc7a9;
+    }
+    .group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .group-tools {
+      display: flex;
+      gap: 6px;
+    }
+    .tool-btn {
+      border: 1px solid var(--line);
+      background: #f7faf5;
+      color: var(--muted);
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 6px 9px;
+      cursor: pointer;
+      opacity: 0.76;
+      transition: all 130ms ease-out;
+    }
+    .tool-btn:hover {
+      border-color: #a3c6ad;
+      color: #244635;
+      opacity: 1;
+    }
+    .tool-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .items {
+      display: grid;
+      gap: 8px;
+    }
+    .item {
+      border: 1px solid var(--line-soft);
+      border-radius: 16px;
+      padding: 10px;
+      background: linear-gradient(180deg, #ffffff, #fcfefb);
+      min-width: 0;
+      transition: border-color 140ms ease-out, box-shadow 140ms ease-out, transform 140ms ease-out;
+      animation: fade-up 180ms ease-out;
+    }
+    .item.selected {
+      border-color: #79b58f;
+      background: #f4fbf5;
+      box-shadow: 0 10px 22px rgba(32, 95, 61, 0.14), inset 4px 0 0 #1d8c55;
+      transform: translateY(-1px);
+    }
+    .item-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+    .item-meta-side {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .item-head {
+      display: grid;
+      grid-template-columns: 62px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+    .thumb {
+      width: 62px;
+      height: 62px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line-soft);
+      background: #f4f8f3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+    .item.selected .thumb {
+      border-color: #acd4b8;
+      box-shadow: 0 6px 14px rgba(29, 140, 85, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-ph {
+      font-size: 20px;
+      line-height: 1;
+      opacity: 0.8;
+    }
+    .item-main {
+      min-width: 0;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #b7dbc4;
+      background: #f2fbf4;
+      color: #206243;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 7px;
+    }
+    .selected-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      border: 1px solid #9eceb0;
+      background: #ebf8ef;
+      color: #1e6340;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 7px;
+      white-space: nowrap;
+    }
+    .name {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.24;
+      margin-bottom: 6px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .item.selected .name {
+      color: #143826;
+    }
+    .price-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 0;
+    }
+    .price-box {
+      border: 1px solid #d8e8d9;
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fcfefb;
+      min-width: 0;
+      flex: 1;
+    }
+    .price-box.primary {
+      background: linear-gradient(180deg, #fbfef9, #f2fbf3);
+    }
+    .price-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .price-val { font-size: 22px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
+    .discount { color: var(--ok); }
+    .stock-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 7px;
+    }
+    .stock-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #b7dbc4;
+      background: #f2fbf4;
+      color: #206243;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 5px 8px;
+      white-space: nowrap;
+    }
+    .stock-badge.low {
+      border-color: #ebcf9f;
+      background: #fff7ea;
+      color: #8b5b13;
+    }
+    .stock-badge.critical {
+      border-color: #efc4bb;
+      background: #fff1ef;
+      color: #963c32;
+    }
+    .toggle {
+      width: 100%;
+      border: 1px solid #cad9cb;
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 10px 8px;
+      cursor: pointer;
+      min-height: 40px;
+      transition: all 140ms ease-out;
+    }
+    .toggle:hover {
+      border-color: #9bc7a9;
+      transform: translateY(-1px);
+    }
+    .toggle.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 8px 18px rgba(29, 140, 85, 0.2);
+    }
+    .toggle:disabled {
+      opacity: 0.7;
+      cursor: default;
+      color: var(--muted);
+      background: #f6f8f4;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 8px;
+      position: sticky;
+      bottom: 0;
+      z-index: 7;
+      background: linear-gradient(180deg, rgba(245, 239, 214, 0), rgba(245, 239, 214, 0.97) 25%);
+      padding-top: 9px;
+      padding-bottom: calc(4px + env(safe-area-inset-bottom));
+      backdrop-filter: blur(6px);
+    }
+    .action-btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 800;
+      padding: 12px 9px;
+      cursor: pointer;
+      min-height: 46px;
+      transition: transform 120ms ease-out, border-color 120ms ease-out;
+      touch-action: manipulation;
+    }
+    .action-btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .action-btn.secondary {
+      background: #f9fcf7;
+      color: var(--muted);
+      border-color: var(--line);
+    }
+    .action-btn:hover {
+      transform: translateY(-1px);
+      border-color: #95c3a5;
+    }
+    .action-btn:disabled {
+      opacity: 0.7;
+      cursor: default;
+    }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 18px 12px;
+      line-height: 1.42;
+      font-size: 13px;
+    }
+    .soft-note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .send-state {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      background: #f7fbf6;
+      line-height: 1.4;
+    }
+    .send-state.ok {
+      color: #1e6340;
+      border-color: #9eceb0;
+      background: #ebf8ef;
+    }
+    .send-state.err {
+      color: var(--danger);
+      border-color: #e0b8b8;
+      background: var(--danger-soft);
+    }
+    .summary-detail {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+      text-align: right;
+    }
+    button:focus-visible {
+      outline: 2px solid #1c8d56;
+      outline-offset: 2px;
+    }
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @media (max-width: 360px) {
+      .t2 { font-size: 24px; }
+      .name { font-size: 14px; }
+      .price-val { font-size: 20px; }
+      .action-btn { font-size: 13px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="card top">
+      <div class="top-copy">
+        <div class="t1" id="appMeta">Скидки на сегодня</div>
+        <div class="t2" id="day">-</div>
+        <div class="hero-note" id="heroNote">Вкусное само себя не выберет.</div>
+      </div>
+      <div class="pill" id="summary">Выбрано: 0</div>
+    </section>
+
+    <section class="card round-status idle" id="roundStatusCard">
+      <div class="round-copy">
+        <div class="round-title" id="roundStatusTitle">Новый раунд готов</div>
+        <div class="round-sub" id="roundStatusSub">Можно выбирать товары.</div>
+      </div>
+      <div class="round-badge" id="roundStatusBadge">Готово</div>
+    </section>
+
+    <section class="card quick-guide" aria-label="Как выбрать товары">
+      <div class="guide-head">
+        <div>
+          <div class="section-title">Как выбрать</div>
+          <div class="section-sub">Три коротких шага, чтобы быстро собрать выбор и отправить его в бот.</div>
+        </div>
+        <div class="guide-badge" id="guideBadge">Выбрано: 0</div>
+      </div>
+      <div class="guide-list">
+        <div class="guide-step">
+          <div class="guide-num">1</div>
+          <div>
+            <div class="guide-step-title">Открой удобный раздел</div>
+            <div class="guide-step-copy">Подборки, любимый товар или готовую еду можно листать отдельно.</div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-num">2</div>
+          <div>
+            <div class="guide-step-title">Тапни по нужным карточкам</div>
+            <div class="guide-step-copy">Выбранное подсветится, а счетчик наверху сразу покажет прогресс.</div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-num">3</div>
+          <div>
+            <div class="guide-step-title">Нажми «Отправить выбор»</div>
+            <div class="guide-step-copy">Если передумал, сначала нажми «Снять всё» или сбрось только текущий раздел.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">Что можно выбрать</div>
+      <div id="tabs" class="tabs"></div>
+      <div id="tabMeta" class="section-sub tab-meta"></div>
+      <div id="viewTabs" class="tabs sub-tabs" style="display:none"></div>
+      <div id="subTabs" class="tabs sub-tabs" style="display:none"></div>
+    </section>
+
+    <section class="card">
+      <div class="group-head">
+        <div>
+          <div class="section-title" id="groupTitle">-</div>
+          <div class="section-sub" id="groupSub">-</div>
+        </div>
+        <div class="group-tools" id="groupTools">
+          <button class="tool-btn" id="selectTabBtn" type="button">Выбрать всё</button>
+          <button class="tool-btn" id="clearTabBtn" type="button">Сброс</button>
+        </div>
+      </div>
+      <div id="items" class="items"></div>
+    </section>
+
+    <section class="actions">
+      <button class="action-btn primary" id="sendAllBtn" type="button">Отправить выбор</button>
+      <button class="action-btn secondary" id="clearAllBtn" type="button">Снять всё</button>
+    </section>
+    <section class="send-state" id="sendState" style="display:none" aria-live="polite"></section>
+  </div>
+
+  <script>
+    const BUILD_ID = "b-20260317-soldout1";
+    const READY_FOOD_PAGE_SIZE = 8;
+    const PENDING_SELECTION_KEY = "vv_pending_selection_v1";
+    const HEADER_QUOTES = [
+      "Вкусное само себя не выберет.",
+      "Хотели по одному, а выбрали как всегда с душой.",
+      "Если товар хороший, его долго не откладывают.",
+      "Что выбрано, то уже почти в корзине.",
+    ];
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.expand();
+      tg.ready();
+    }
+
+    function base64UrlToBytes(raw) {
+      const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+      const b64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+      const binary = atob(b64);
+      return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    }
+
+    function decodeBase64UrlJson(raw) {
+      if (!raw) return null;
+      try {
+        const bytes = base64UrlToBytes(raw);
+        const text = new TextDecoder("utf-8").decode(bytes);
+        return JSON.parse(text);
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function decodeCompressedBase64UrlJson(raw) {
+      if (!raw) return null;
+      try {
+        const bytes = base64UrlToBytes(raw);
+        if (!window.pako || typeof window.pako.inflate !== "function") return null;
+        const inflated = window.pako.inflate(bytes);
+        const text = new TextDecoder("utf-8").decode(inflated);
+        return JSON.parse(text);
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function maybeInt(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      const whole = Math.trunc(num);
+      return whole >= 0 ? whole : null;
+    }
+
+    function unpackItem(x) {
+      return {
+        item_id: String(x?.i || x?.item_id || ""),
+        name: String(x?.n || x?.name || ""),
+        price: Number(x?.p ?? x?.price ?? 0),
+        discount_price: Number(x?.d ?? x?.discount_price ?? 0),
+        source: String(x?.s || x?.source || ""),
+        image_url: String(x?.u || x?.image_url || ""),
+        stock_qty: maybeInt(x?.q ?? x?.stock_qty),
+        availability_status: String(x?.as || x?.availability_status || "unknown"),
+        availability_reason: String(x?.ar || x?.availability_reason || ""),
+        group_qty: maybeInt(x?.gt ?? x?.group_qty) || 0,
+      };
+    }
+
+    function expandImageUrl(raw) {
+      const s = String(raw || "").trim();
+      if (!s) return "";
+      if (s.includes("no-image.svg")) return "";
+      if (s.startsWith("vi:")) {
+        const parts = s.split(":");
+        const variant = parts[1] || "0";
+        const uuid = (parts[2] || "").toLowerCase();
+        const looksUuid = /^[0-9a-f-]{36}$/.test(uuid);
+        if (looksUuid) {
+          const dir = variant === "1" ? "site/site_MiniWebP" : "site_MiniWebP";
+          return `https://img.vkusvill.ru/pim/images/${dir}/${uuid}.webp`;
+        }
+      }
+      if (s.startsWith("vv:")) {
+        return `https://img.vkusvill.ru/pim/images/${s.slice(3)}`;
+      }
+      if (s.startsWith("//")) {
+        return `https:${s}`;
+      }
+      if (s.startsWith("/")) {
+        return `https://vkusvill.ru${s}`;
+      }
+      return s;
+    }
+
+    function buildImageCandidates(raw, itemId) {
+      const first = expandImageUrl(raw);
+      const out = [];
+      const mirrorPath = imageMirrorMap[String(itemId || "")] || "";
+      if (mirrorPath) {
+        if (mirrorPath.startsWith("http://") || mirrorPath.startsWith("https://")) {
+          if (!out.includes(mirrorPath)) out.push(mirrorPath);
+        } else {
+          const rel = mirrorPath.startsWith("./")
+            ? mirrorPath
+            : `./${mirrorPath.replace(/^\/+/, "")}`;
+          if (!out.includes(rel)) out.push(rel);
+        }
+      }
+      if (!first) return out;
+      if (!out.includes(first)) out.push(first);
+      const base = first.split("?")[0];
+      const hasWebp = /\.webp$/i.test(base);
+      const push = (value) => {
+        if (!value) return;
+        if (!out.includes(value)) out.push(value);
+      };
+      if (base.includes("/site/site_MiniWebP/")) {
+        push(base.replace("/site/site_MiniWebP/", "/site_MiniWebP/"));
+      }
+      if (base.includes("/site_MiniWebP/")) {
+        push(base.replace("/site_MiniWebP/", "/site/site_MiniWebP/"));
+      }
+      if (hasWebp) {
+        push(base.replace(/\.webp$/i, ".jpg"));
+        push(base.replace(/\.webp$/i, ".jpeg"));
+        if (base.includes("MiniWebP")) {
+          push(base.replace("MiniWebP", "MiniJPG").replace(/\.webp$/i, ".jpg"));
+          push(base.replace("MiniWebP", "MiniJPEG").replace(/\.webp$/i, ".jpeg"));
+        }
+      }
+      return out;
+    }
+
+    function validItem(x) {
+      return Boolean(x.item_id && x.name);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const urlBuildId = String(params.get("ui") || "");
+    const hasDataParam = params.has("data");
+    let payload = (
+      params.get("enc") === "z"
+        ? decodeCompressedBase64UrlJson(params.get("data"))
+        : decodeBase64UrlJson(params.get("data"))
+    ) || decodeBase64UrlJson(params.get("data")) || {};
+
+    function hasUsefulPayloadData(value) {
+      if (!value || typeof value !== "object") return false;
+      if (Array.isArray(value.m) && value.m.length) return true;
+      if (Array.isArray(value.g) && value.g.length) return true;
+      if (Array.isArray(value.items) && value.items.length) return true;
+      if (Array.isArray(value.groups) && value.groups.length) return true;
+      return false;
+    }
+
+    function payloadRegularCount(value) {
+      if (!value || typeof value !== "object") return 0;
+      if (Number.isFinite(Number(value.rc))) return Number(value.rc);
+      if (Array.isArray(value.g)) {
+        return value.g.reduce((acc, group) => acc + (Array.isArray(group) ? group.length : 0), 0);
+      }
+      if (Array.isArray(value.groups)) {
+        return value.groups.reduce((acc, group) => acc + (Array.isArray(group?.items) ? group.items.length : 0), 0);
+      }
+      return 0;
+    }
+
+    function payloadReadyCount(value) {
+      if (!value || typeof value !== "object") return 0;
+      if (Array.isArray(value.r)) return value.r.length;
+      if (Array.isArray(value.extra_ready_food)) return value.extra_ready_food.length;
+      return 0;
+    }
+
+    function payloadTotalCount(value) {
+      if (!value || typeof value !== "object") return 0;
+      if (Array.isArray(value.m)) return value.m.length;
+      if (Array.isArray(value.items)) return value.items.length;
+      return 0;
+    }
+
+    function payloadItemIds(value) {
+      if (!value || typeof value !== "object") return [];
+      if (Array.isArray(value.m)) {
+        return value.m
+          .filter((row) => Array.isArray(row) && row.length >= 1)
+          .map((row) => String(row[0] || ""))
+          .filter(Boolean);
+      }
+      if (Array.isArray(value.items)) {
+        return value.items
+          .map((row) => String(row?.item_id || ""))
+          .filter(Boolean);
+      }
+      return [];
+    }
+
+    function loadLatestPayloadSync() {
+      try {
+        const xhr = new XMLHttpRequest();
+        const stamp = Date.now();
+        xhr.open("GET", `./latest.json?v=${stamp}`, false);
+        xhr.setRequestHeader("Cache-Control", "no-cache");
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
+          const data = JSON.parse(xhr.responseText);
+          if (hasUsefulPayloadData(data)) return data;
+        }
+      } catch (_err) {
+        return null;
+      }
+      return null;
+    }
+
+    const latestPayload = loadLatestPayloadSync();
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const payloadDayRaw = String(payload.day || payload.d || "");
+    const latestDayRaw = String(latestPayload?.day || latestPayload?.d || "");
+    const payloadIsFresh = payloadDayRaw === today;
+    const latestIsFresh = latestDayRaw === today;
+    let staleNotice = "";
+
+    if (!hasUsefulPayloadData(payload)) {
+      if (latestIsFresh) payload = latestPayload;
+      else staleNotice = "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.";
+    } else if (!payloadIsFresh) {
+      if (latestIsFresh) {
+        const preservedYour = payload.your || {};
+        payload = { ...latestPayload, your: preservedYour };
+      } else {
+        payload = {};
+        staleNotice = "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.";
+      }
+    } else if (latestPayload) {
+      const payloadDay = String(payload.day || payload.d || "");
+      const latestDay = String(latestPayload.day || latestPayload.d || "");
+      const payloadGenerated = String(payload.generated_at || "");
+      const latestGenerated = String(latestPayload.generated_at || "");
+      const payloadIds = new Set(payloadItemIds(payload));
+      const latestIds = new Set(payloadItemIds(latestPayload));
+      const payloadContainsUnknownIds = Array.from(payloadIds).some((itemId) => !latestIds.has(itemId));
+      const shouldPreferLatest =
+        payloadDay === latestDay &&
+        (
+          String(payload.snapshot_id || payload.sid || "") !== String(latestPayload.snapshot_id || latestPayload.sid || "") ||
+          (latestGenerated && payloadGenerated && latestGenerated > payloadGenerated) ||
+          payloadRegularCount(latestPayload) > payloadRegularCount(payload) ||
+          payloadReadyCount(latestPayload) > payloadReadyCount(payload) ||
+          payloadTotalCount(latestPayload) > payloadTotalCount(payload) ||
+          payloadContainsUnknownIds
+        );
+      if (shouldPreferLatest) {
+        const preservedYour = payload.your || {};
+        payload = { ...latestPayload, your: preservedYour };
+      }
+    }
+
+    const day = payload.day || payload.d || today;
+    const snapshotId = String(payload.snapshot_id || payload.sid || "");
+    const roundStatus = payload.round_status || payload.rs || null;
+    let imageMirrorMap = {};
+    const inlineMirrorMap = (latestPayload && typeof latestPayload.im === "object" && latestPayload.im)
+      || (payload && typeof payload.im === "object" && payload.im)
+      || {};
+    imageMirrorMap = Object.fromEntries(
+      Object.entries(inlineMirrorMap).map(([key, value]) => [String(key), String(value)]),
+    );
+    document.getElementById("day").textContent = day;
+    document.getElementById("appMeta").textContent = staleNotice
+      ? "Скидки на сегодня не обновились"
+      : "Скидки на сегодня";
+
+    const fallbackItems = Array.isArray(payload.items)
+      ? payload.items.map(unpackItem).filter(validItem)
+      : [];
+
+    const payloadGroups = Array.isArray(payload.groups) ? payload.groups : [];
+    const payloadFavorite = Array.isArray(payload.favorite)
+      ? payload.favorite.map(unpackItem).filter(validItem)
+      : [];
+    const payloadReadyFood = Array.isArray(payload.extra_ready_food)
+      ? payload.extra_ready_food.map(unpackItem).filter(validItem)
+      : [];
+    const compactMap = Array.isArray(payload.m) ? payload.m : [];
+    const compactGroups = Array.isArray(payload.g) ? payload.g : [];
+    const compactFavorite = Array.isArray(payload.f) ? payload.f : [];
+    const compactReadyFood = Array.isArray(payload.r) ? payload.r : [];
+    const compactGroupTotals = Array.isArray(payload.gt) ? payload.gt : [];
+    const compactGroupTotalsByIndex = new Map(
+      compactGroupTotals
+        .filter((row) => Array.isArray(row) && row.length >= 2)
+        .map((row) => [Number(row[0]), Number(row[1] || 0)]),
+    );
+
+    function fallbackGroupsFromItems(items) {
+      const favorites = [];
+      const regular = [];
+      const readyFood = [];
+      for (const item of items) {
+        const src = item.source.toLowerCase();
+        if (src.includes("favorite") || src.includes("fav")) favorites.push(item);
+        else if (src.startsWith("vkusvill_offers_ready_food")) readyFood.push(item);
+        else regular.push(item);
+      }
+      regular.splice(18);
+      const groups = [];
+      for (let i = 0; i < 3; i++) {
+        groups.push({
+          id: `g${i + 1}`,
+          title: `Подборка ${i + 1}`,
+          items: regular.slice(i * 6, i * 6 + 6),
+          type: "group",
+        });
+      }
+      return { groups, favorite: favorites.slice(0, 1), readyFood };
+    }
+
+    let groups = [];
+    let favoriteItems = [];
+    let readyFoodItems = [];
+    if (compactMap.length && compactGroups.length) {
+      const mapItem = (idx) => {
+        const row = compactMap[Number(idx)];
+        if (!Array.isArray(row) || row.length < 3) return null;
+        return {
+          item_id: String(row[0] || ""),
+          name: String(row[1] || ""),
+          price: 0,
+          discount_price: Number(row[2] || 0),
+          source: "",
+          image_url: expandImageUrl(row[3]),
+          stock_qty: maybeInt(row[4]),
+          availability_status: String(row[5] || "unknown"),
+          availability_reason: String(row[6] || ""),
+          group_qty: Number(compactGroupTotalsByIndex.get(Number(idx)) || 0),
+        };
+      };
+      groups = [0, 1, 2].map((idx) => {
+        const ids = Array.isArray(compactGroups[idx]) ? compactGroups[idx] : [];
+        const gItems = ids.map(mapItem).filter(validItem);
+        return {
+          id: `g${idx + 1}`,
+          title: `Подборка ${idx + 1}`,
+          items: gItems.slice(0, 6),
+          type: "group",
+        };
+      });
+      favoriteItems = compactFavorite.map(mapItem).filter(validItem).slice(0, 1);
+      readyFoodItems = compactReadyFood.map(mapItem).filter(validItem);
+    } else if (payloadGroups.length) {
+      groups = [0, 1, 2].map((idx) => {
+        const g = payloadGroups[idx] || {};
+        const gItems = Array.isArray(g.items) ? g.items.map(unpackItem).filter(validItem) : [];
+        return {
+          id: String(g.id || `g${idx + 1}`),
+          title: String(g.title || `Подборка ${idx + 1}`),
+          items: gItems.slice(0, 6),
+          type: "group",
+        };
+      });
+      favoriteItems = payloadFavorite.slice(0, 1);
+      readyFoodItems = payloadReadyFood;
+    } else {
+      const fb = fallbackGroupsFromItems(fallbackItems);
+      groups = fb.groups;
+      favoriteItems = fb.favorite;
+      readyFoodItems = fb.readyFood;
+    }
+
+    const tabs = [...groups];
+    if (favoriteItems.length) {
+      tabs.push({
+        id: "favorite",
+        title: "Любимый",
+        items: favoriteItems,
+        type: "favorite",
+      });
+    }
+    if (readyFoodItems.length) {
+      tabs.push({
+        id: "ready_food",
+        title: "Готовая еда",
+        items: readyFoodItems,
+        type: "ready_food",
+      });
+    }
+
+    const allById = new Map();
+    for (const item of [...groups.flatMap((g) => g.items), ...favoriteItems, ...readyFoodItems]) {
+      if (!item?.item_id) continue;
+      if (!allById.has(item.item_id)) allById.set(item.item_id, item);
+    }
+    const allRealItems = Array.from(allById.values());
+    const sourceLabelById = new Map();
+    for (const group of groups) {
+      for (const item of group.items || []) {
+        if (!item?.item_id) continue;
+        sourceLabelById.set(item.item_id, group.title || "Подборка");
+      }
+    }
+    for (const item of favoriteItems) {
+      if (!item?.item_id) continue;
+      sourceLabelById.set(item.item_id, "Любимый");
+    }
+    for (const item of readyFoodItems) {
+      if (!item?.item_id) continue;
+      sourceLabelById.set(item.item_id, "Готовая еда");
+    }
+
+    function updateOverview() {
+      const el = document.getElementById("appMeta");
+      if (!el) return;
+      const regularCount = Number(payload.regular_count ?? payload.rc ?? groups.reduce((acc, g) => acc + g.items.length, 0));
+      const regularCapacity = Number(payload.regular_capacity ?? payload.cap ?? 18);
+      const parts = [`${regularCount}/${regularCapacity} скидок`];
+      if (favoriteItems.length) parts.push("любимый");
+      if (readyFoodItems.length) parts.push(`еда ${readyFoodItems.length}`);
+      el.textContent = parts.join(" · ");
+    }
+
+    function selectedCountInItems(items) {
+      return (items || []).reduce((acc, item) => acc + (selected[item?.item_id] ? 1 : 0), 0);
+    }
+
+    function getTabSelectedCount(tab) {
+      if (!tab || !Array.isArray(tab.items)) return 0;
+      return selectedCountInItems(tab.items);
+    }
+
+    function setSendState(text, kind = "ok") {
+      const el = document.getElementById("sendState");
+      if (!el) return;
+      el.style.display = "block";
+      el.className = `send-state ${kind}`;
+      el.textContent = text;
+    }
+    function clearSendState() {
+      const el = document.getElementById("sendState");
+      if (!el) return;
+      el.style.display = "none";
+      el.className = "send-state";
+      el.textContent = "";
+    }
+    function savePendingSelection(payloadOut) {
+      try {
+        localStorage.setItem(PENDING_SELECTION_KEY, JSON.stringify({
+          saved_at: Date.now(),
+          build_id: BUILD_ID,
+          payload: payloadOut,
+        }));
+      } catch (_err) {
+        // noop
+      }
+    }
+    function loadPendingSelection() {
+      try {
+        const raw = localStorage.getItem(PENDING_SELECTION_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (_err) {
+        return null;
+      }
+    }
+    function clearPendingSelection() {
+      try {
+        localStorage.removeItem(PENDING_SELECTION_KEY);
+      } catch (_err) {
+        // noop
+      }
+    }
+    const selected = {};
+    for (const item of allRealItems) {
+      const initial = Number((payload.your || {})[item.item_id] || 0);
+      selected[item.item_id] = initial > 0 ? 1 : 0;
+    }
+
+    const pendingSelection = loadPendingSelection();
+    if (pendingSelection && pendingSelection.payload && pendingSelection.payload.day === day) {
+      const pendingQty = pendingSelection.payload.qty || {};
+      const hasLiveSelection = Object.values(selected).some((value) => Number(value || 0) > 0);
+      if (!hasLiveSelection) {
+        for (const item of allRealItems) {
+          if (!item?.item_id) continue;
+          selected[item.item_id] = Number(pendingQty[item.item_id] || 0) > 0 ? 1 : 0;
+        }
+      }
+    }
+
+    let activeTab = tabs.length ? tabs[0].id : "g1";
+    let readyFoodPage = 0;
+    let viewMode = "discount";
+    let typeKey = "all";
+
+    const TYPE_DEFS = [
+      { key: "all", label: "Все" },
+      { key: "soups", label: "Супы" },
+      { key: "salads", label: "Салаты" },
+      { key: "mains", label: "Второе" },
+      { key: "sandwiches", label: "Сэндвичи" },
+      { key: "rolls", label: "Роллы" },
+      { key: "desserts", label: "Сладкое" },
+      { key: "drinks", label: "Напитки" },
+      { key: "other", label: "Другое" },
+    ];
+
+    function normalizeForType(value) {
+      return String(value || "").toLowerCase().replace(/ё/g, "е");
+    }
+
+    function detectItemType(item) {
+      const text = normalizeForType(item?.name || "");
+      if (!text) return "other";
+      if (/(суп|уха|борщ|харчо|лапша|бульон|рамен|солянк)/.test(text)) return "soups";
+      if (/(салат|винегрет|цезар|поке|коул слоу|свежест)/.test(text)) return "salads";
+      if (/(сэндвич|сандвич|сандочи|чиабатт|бургер|шаурм|ролл с куриц|ролл с тунцом)/.test(text)) return "sandwiches";
+      if (/(ролл|суши|маки|филадельф|калифорни|абури|темпур)/.test(text)) return "rolls";
+      if (/(тарталет|сырник|чизкейк|тирамису|пирож|десерт|торт|пломбир|морожен|эклер|запеканк.*творож)/.test(text)) return "desserts";
+      if (/(напиток|лимонад|морс|сок|кофе|чай|смузи|мохито|кола|вода)/.test(text)) return "drinks";
+      if (/(паста|пенне|гречк|рис|котлет|фрикадель|филе|говядин|куриц|пюре|зраз|карбонар|картоф|комбо|ежик)/.test(text)) return "mains";
+      return "other";
+    }
+
+    function buildTypeBuckets(items) {
+      const buckets = new Map(TYPE_DEFS.map((x) => [x.key, []]));
+      for (const item of items || []) {
+        const key = detectItemType(item);
+        const target = buckets.get(key) || buckets.get("other");
+        target.push(item);
+      }
+      return buckets;
+    }
+
+    function rub(value) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n)) return "--";
+      const text = Number.isInteger(n) ? String(n) : n.toFixed(2);
+      return `${text} ₽`;
+    }
+
+    function stockBadgeState(value) {
+      const qty = maybeInt(value);
+      if (qty === null) return null;
+      if (qty <= 0) return "critical";
+      if (qty <= 3) return "critical";
+      if (qty <= 8) return "low";
+      return "ok";
+    }
+
+    function selectedCount() {
+      return Object.values(selected).reduce((acc, n) => acc + Number(n || 0), 0);
+    }
+
+    function syncTelegramMainButton() {
+      if (!tg || !tg.MainButton) return;
+      const count = selectedCount();
+      tg.MainButton.setText(count > 0 ? `Отправить выбор (${count})` : "Отправить выбор");
+      if (count > 0) tg.MainButton.show();
+      else tg.MainButton.hide();
+    }
+
+    function updateSummary() {
+      const total = selectedCount();
+      document.getElementById("summary").textContent = `Выбрано: ${total}`;
+      const guideBadge = document.getElementById("guideBadge");
+      if (guideBadge) {
+        guideBadge.textContent = total > 0 ? `Выбрано: ${total}` : "Пока ничего";
+      }
+      const hero = document.getElementById("heroNote");
+      if (hero) {
+        const count = total;
+        const idx = count > 0 ? Math.min(count, HEADER_QUOTES.length - 1) : 0;
+        const freshnessNote = urlBuildId && urlBuildId !== BUILD_ID ? " Обнови Mini App, подтянулся новый экран." : "";
+        hero.textContent = `${HEADER_QUOTES[idx]}${freshnessNote}`;
+      }
+      syncTelegramMainButton();
+    }
+
+    function renderRoundStatus() {
+      const card = document.getElementById("roundStatusCard");
+      const title = document.getElementById("roundStatusTitle");
+      const sub = document.getElementById("roundStatusSub");
+      const badge = document.getElementById("roundStatusBadge");
+      if (!card || !title || !sub || !badge) return;
+      const state = roundStatus && typeof roundStatus === "object" ? roundStatus : {};
+      const kind = String(state.k || "idle");
+      card.className = `card round-status ${kind}`;
+      const mapped = {
+        open: {
+          title: "Можно выбирать товары",
+          sub: "Раунд открыт. Отмечай нужное и отправляй выбор, пока он активен.",
+          badge: "Открыто",
+        },
+        finalizing: {
+          title: "Раунд почти собран",
+          sub: "Сейчас идет финальная сверка. Выбор еще можно дополнять, если раунд не закрыт.",
+          badge: "Сборка",
+        },
+        partially_added: {
+          title: "Часть товаров уже в корзине",
+          sub: "Что-то уже добавлено, а остальное можно добрать или снять перед отправкой.",
+          badge: "Частично",
+        },
+        added_waiting_payment: {
+          title: "Заказ собран, ждем оплату",
+          sub: "Товары уже в корзине. Осталось дождаться оплаты, чтобы не сбить текущий цикл.",
+          badge: "Оплата",
+        },
+        closed: {
+          title: "Раунд закрыт",
+          sub: "Новые товары сейчас не принимаются. Можно только посмотреть итог или дождаться следующего раунда.",
+          badge: "Закрыто",
+        },
+        idle: {
+          title: "Новый раунд готов",
+          sub: "Можно выбирать товары.",
+          badge: "Готово",
+        },
+      };
+      const fallback = mapped[kind] || mapped.idle;
+      title.textContent = String(state.t || fallback.title);
+      sub.textContent = String(state.s || fallback.sub);
+      badge.textContent = String(state.b || fallback.badge);
+    }
+
+    function getActiveTab() {
+      if (viewMode === "type") {
+        const buckets = buildTypeBuckets(allRealItems);
+        const activeDef = TYPE_DEFS.find((x) => x.key === typeKey) || TYPE_DEFS[0];
+        const items = typeKey === "all" ? allRealItems : (buckets.get(typeKey) || []);
+        return {
+          id: `type_${activeDef.key}`,
+          title: activeDef.label,
+          items,
+          type: "type_view",
+        };
+      }
+      return tabs.find((x) => x.id === activeTab) || tabs[0] || null;
+    }
+
+    function getVisibleItems(tab) {
+      if (!tab) return [];
+      if (tab.type === "type_view") return Array.isArray(tab.items) ? tab.items : [];
+      if (tab.type !== "ready_food") return Array.isArray(tab.items) ? tab.items : [];
+      const start = readyFoodPage * READY_FOOD_PAGE_SIZE;
+      return (tab.items || []).slice(start, start + READY_FOOD_PAGE_SIZE);
+    }
+
+    function getTabMeta(tab) {
+      if (!tab) return "";
+      const selectedInTab = getTabSelectedCount(tab);
+      const selectedText = selectedInTab > 0 ? ` · выбрано ${selectedInTab}` : "";
+      if (tab.type === "type_view") return `${tab.title} · ${tab.items.length} товаров из скидочного набора${selectedText}`;
+      if (tab.type === "group") return `${tab.title} · ${tab.items.length} из 6 товаров${selectedText}`;
+      if (tab.type === "favorite") return `Любимый товар дня${selectedText}`;
+      if (tab.type === "ready_food") {
+        const pages = Math.max(1, Math.ceil((tab.items.length || 0) / READY_FOOD_PAGE_SIZE));
+        return `Готовая еда · ${tab.items.length} товаров · страница ${readyFoodPage + 1} из ${pages}${selectedText}`;
+      }
+      return `${tab.items.length} товаров${selectedText}`;
+    }
+
+    function setTabSelection(mode) {
+      const tab = getActiveTab();
+      const visibleItems = getVisibleItems(tab);
+      if (!tab || !visibleItems.length) return;
+      const next = mode === "all" ? 1 : 0;
+      for (const item of visibleItems) {
+        if (!item?.item_id) continue;
+        selected[item.item_id] = next;
+      }
+      renderGroup();
+      updateSummary();
+    }
+
+    function toggleItem(itemId) {
+      if (!itemId) return;
+      selected[itemId] = selected[itemId] ? 0 : 1;
+      renderGroup();
+      updateSummary();
+    }
+
+    function clearAllSelection() {
+      for (const item of allRealItems) {
+        if (!item?.item_id) continue;
+        selected[item.item_id] = 0;
+      }
+      clearPendingSelection();
+      renderGroup();
+      updateSummary();
+      setSendState("Выбор очищен. Нажми «Отправить выбор», чтобы бот сохранил отмену.", "ok");
+    }
+
+    function renderTabs() {
+      const root = document.getElementById("tabs");
+      root.innerHTML = "";
+      if (viewMode === "type") {
+        const buckets = buildTypeBuckets(allRealItems);
+        const defs = TYPE_DEFS.filter((x) => x.key === "all" || (buckets.get(x.key) || []).length > 0);
+        for (const def of defs) {
+          const count = def.key === "all" ? allRealItems.length : (buckets.get(def.key) || []).length;
+          const btn = document.createElement("button");
+          btn.className = `tab${def.key === typeKey ? " active" : ""}`;
+          btn.textContent = `${def.label} ${count}`;
+          btn.addEventListener("click", () => {
+            typeKey = def.key;
+            renderTabs();
+            renderGroup();
+          });
+          root.appendChild(btn);
+        }
+        return;
+      }
+      const labels = { g1: "1-я", g2: "2-я", g3: "3-я", favorite: "Любимый", ready_food: "Еда" };
+      for (const tab of tabs) {
+        const btn = document.createElement("button");
+        btn.className = `tab${tab.id === activeTab ? " active" : ""}`;
+        const label = labels[tab.id] || tab.title;
+        btn.textContent = tab.type === "ready_food" ? `${label} ${tab.items.length}` : label;
+        btn.addEventListener("click", () => {
+          activeTab = tab.id;
+          if (tab.type === "ready_food") {
+            readyFoodPage = 0;
+          }
+          renderTabs();
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function renderViewTabs(tab) {
+      const root = document.getElementById("viewTabs");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!allRealItems.length) {
+        root.style.display = "none";
+        return;
+      }
+      root.style.display = "flex";
+      const defs = [
+        { key: "discount", label: "По скидкам" },
+        { key: "type", label: "По типу" },
+      ];
+      for (const def of defs) {
+        const btn = document.createElement("button");
+        btn.className = `sub-tab${viewMode === def.key ? " active" : ""}`;
+        btn.textContent = def.label;
+        btn.addEventListener("click", () => {
+          viewMode = def.key;
+          readyFoodPage = 0;
+          typeKey = "all";
+          renderTabs();
+          renderViewTabs(getActiveTab());
+          renderSubTabs(getActiveTab());
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function renderSubTabs(tab) {
+      const root = document.getElementById("subTabs");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!tab || tab.type !== "ready_food" || viewMode !== "discount") {
+        root.style.display = "none";
+        return;
+      }
+      if (tab.items.length <= READY_FOOD_PAGE_SIZE) {
+        root.style.display = "none";
+        return;
+      }
+      root.style.display = "flex";
+      const pageCount = Math.ceil(tab.items.length / READY_FOOD_PAGE_SIZE);
+      for (let page = 0; page < pageCount; page++) {
+        const start = page * READY_FOOD_PAGE_SIZE + 1;
+        const end = Math.min((page + 1) * READY_FOOD_PAGE_SIZE, tab.items.length);
+        const btn = document.createElement("button");
+        btn.className = `sub-tab${page === readyFoodPage ? " active" : ""}`;
+        btn.textContent = `${start}-${end}`;
+        btn.addEventListener("click", () => {
+          readyFoodPage = page;
+          renderSubTabs(tab);
+          renderGroup();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function renderRealItem(itemsEl, item) {
+      const wrap = document.createElement("article");
+      const isSelected = Boolean(selected[item.item_id]);
+      wrap.className = `item${isSelected ? " selected" : ""}`;
+
+      const src = String(item.source || "").toLowerCase();
+      const isFavorite = src.includes("favorite") || src.includes("fav") || String(item.item_id || "").startsWith("fav_");
+      const isReadyFood = src.startsWith("vkusvill_offers_ready_food");
+      const sourceBaseLabel = sourceLabelById.get(item.item_id)
+        || (isFavorite ? "Любимый" : isReadyFood ? "Готовая еда" : "Подборка");
+      const sourceLabel = sourceBaseLabel === "Любимый"
+        ? "❤️ Любимый"
+        : sourceBaseLabel === "Готовая еда"
+          ? "🍱 Готовая еда"
+          : `🏷️ ${sourceBaseLabel}`;
+      if (isFavorite || isReadyFood) {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = sourceLabel;
+        left.appendChild(tag);
+        if (isSelected) {
+          const mark = document.createElement("span");
+          mark.className = "selected-mark";
+          mark.textContent = "✓ Выбрано";
+          right.appendChild(mark);
+        }
+        meta.appendChild(left);
+        meta.appendChild(right);
+        wrap.appendChild(meta);
+      } else if (isSelected) {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
+        const mark = document.createElement("span");
+        mark.className = "selected-mark";
+        mark.textContent = "✓ Выбрано";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = sourceLabel;
+        left.appendChild(tag);
+        right.appendChild(mark);
+        meta.appendChild(left);
+        meta.appendChild(right);
+        wrap.appendChild(meta);
+      } else if (viewMode === "type") {
+        const meta = document.createElement("div");
+        meta.className = "item-meta";
+        const left = document.createElement("div");
+        left.className = "item-meta-side";
+        const right = document.createElement("div");
+        right.className = "item-meta-side";
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = sourceLabel;
+        left.appendChild(tag);
+        meta.appendChild(left);
+        meta.appendChild(right);
+        wrap.appendChild(meta);
+      }
+
+      const head = document.createElement("div");
+      head.className = "item-head";
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+      const imageUrl = String(item.image_url || "").trim();
+      if (imageUrl) {
+        const candidates = buildImageCandidates(imageUrl, item.item_id);
+        const img = document.createElement("img");
+        img.alt = item.name;
+        img.loading = "lazy";
+        let idx = 0;
+        const loadNext = () => {
+          if (idx >= candidates.length) {
+            thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+            return;
+          }
+          img.src = candidates[idx];
+          idx += 1;
+        };
+        img.onerror = () => {
+          loadNext();
+        };
+        thumb.appendChild(img);
+        loadNext();
+      } else {
+        thumb.innerHTML = `<span class="thumb-ph">${isReadyFood ? "🍱" : "🥗"}</span>`;
+      }
+      head.appendChild(thumb);
+
+      const main = document.createElement("div");
+      main.className = "item-main";
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = item.name;
+      main.appendChild(name);
+
+      const stockQty = maybeInt(item.stock_qty);
+      const availabilityStatus = String(item.availability_status || "unknown");
+      const availabilityReason = String(item.availability_reason || "");
+      const groupQty = Number(item.group_qty || 0);
+      const soldOut = availabilityStatus === "sold_out" || (stockQty !== null && stockQty <= 0);
+      const tomorrowOnly = availabilityStatus === "tomorrow_only";
+      if (stockQty !== null || groupQty > 0 || soldOut || tomorrowOnly) {
+        const stockRow = document.createElement("div");
+        stockRow.className = "stock-row";
+        if (tomorrowOnly) {
+          const stock = document.createElement("span");
+          stock.className = "stock-badge low";
+          stock.textContent = "Только завтра";
+          stockRow.appendChild(stock);
+        } else if (stockQty !== null || soldOut) {
+          const stock = document.createElement("span");
+          const state = stockBadgeState(stockQty);
+          stock.className = `stock-badge${state && state !== "ok" ? ` ${state}` : ""}`;
+          stock.textContent = stockQty <= 0 ? "Нет" : `Осталось: ${stockQty} шт`;
+          if (soldOut && !stockQty) {
+            stock.textContent = "Нет";
+          }
+          stockRow.appendChild(stock);
+        }
+        if (groupQty > 0) {
+          const group = document.createElement("span");
+          group.className = "stock-badge";
+          group.textContent = `Выбрали: ${groupQty}`;
+          stockRow.appendChild(group);
+        }
+        main.appendChild(stockRow);
+      }
+
+      const prices = document.createElement("div");
+      prices.className = "price-row";
+      const currentPrice = Number(item.discount_price || item.price || 0);
+      prices.innerHTML = `
+        <div class="price-box primary">
+          <div class="price-label">Цена сегодня</div>
+          <div class="price-val discount">${rub(currentPrice)}</div>
+        </div>
+      `;
+      main.appendChild(prices);
+
+      head.appendChild(main);
+      wrap.appendChild(head);
+
+      const t = document.createElement("button");
+      t.className = `toggle${isSelected ? " active" : ""}`;
+      const unavailable = soldOut || tomorrowOnly;
+      t.textContent = unavailable
+        ? (tomorrowOnly ? "Только завтра" : "Нет в наличии")
+        : (isSelected ? "✅ Выбрано" : "Выбрать");
+      t.disabled = unavailable;
+      if (!unavailable) {
+        t.addEventListener("click", () => toggleItem(item.item_id));
+      }
+      wrap.appendChild(t);
+      itemsEl.appendChild(wrap);
+    }
+
+    function renderGroup() {
+      const titleEl = document.getElementById("groupTitle");
+      const subEl = document.getElementById("groupSub");
+      const metaEl = document.getElementById("tabMeta");
+      const itemsEl = document.getElementById("items");
+      const toolsEl = document.getElementById("groupTools");
+      const selectBtn = document.getElementById("selectTabBtn");
+      const clearBtn = document.getElementById("clearTabBtn");
+      itemsEl.innerHTML = "";
+
+      const tab = getActiveTab();
+      if (!tab) {
+        titleEl.textContent = "Нет товаров";
+        subEl.textContent = "";
+        if (metaEl) metaEl.textContent = staleNotice || "Данные на сегодня пока не готовы";
+        if (toolsEl) toolsEl.style.display = "none";
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        if (staleNotice) {
+          empty.innerHTML = `${staleNotice}<br/>Обнови Mini App позже, когда появится свежий срез.`;
+        } else if (!hasDataParam) {
+          empty.innerHTML = "Сегодняшние товары еще не подтянулись.<br/>Открой /app еще раз чуть позже.";
+        } else {
+          empty.innerHTML = "Пока здесь пусто.<br/>Попробуй открыть Mini App еще раз.";
+        }
+        itemsEl.appendChild(empty);
+        renderViewTabs(null);
+        renderSubTabs(null);
+        return;
+      }
+
+      titleEl.textContent = tab.title;
+      subEl.textContent = tab.type === "group"
+        ? "Выбери товары в этой подборке и отправь выбор одним нажатием"
+        : tab.type === "type_view"
+          ? "Смотри весь скидочный набор по типам блюд и отмечай нужное"
+          : tab.type === "ready_food"
+            ? "Здесь готовая еда разбита на страницы, чтобы было проще просматривать выбор"
+            : "Нажми на нужные товары и отправь выбор";
+      if (metaEl) metaEl.textContent = getTabMeta(tab);
+      const visibleItems = getVisibleItems(tab);
+      renderViewTabs(tab);
+      renderSubTabs(tab);
+
+      if (toolsEl) {
+        toolsEl.style.display = visibleItems.length ? "flex" : "none";
+      }
+      if (selectBtn) {
+        selectBtn.disabled = !visibleItems.length;
+        selectBtn.textContent = tab && tab.type === "ready_food" && tab.items.length > visibleItems.length
+          ? "Выбрать страницу"
+          : visibleItems.length <= 1
+            ? "Выбрать"
+            : "Выбрать всё";
+      }
+      if (clearBtn) {
+        clearBtn.disabled = !visibleItems.length;
+        clearBtn.textContent = tab && tab.type === "ready_food" && tab.items.length > visibleItems.length
+          ? "Сброс страницы"
+          : "Сброс";
+      }
+
+      if (!visibleItems.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.innerHTML = tab.type === "group"
+          ? "Эта подборка еще не открылась полностью.<div class=\"soft-note\">Остальные товары подтянутся после следующего обновления.</div>"
+          : tab.type === "ready_food"
+            ? "На этой странице пока ничего нет.<div class=\"soft-note\">Переключись на следующую страницу или обнови Mini App позже.</div>"
+            : "Сейчас в этом разделе ничего не показываем.";
+        itemsEl.appendChild(empty);
+        return;
+      }
+
+      for (const item of visibleItems) {
+        renderRealItem(itemsEl, item);
+      }
+    }
+
+    async function loadImageMirrorMap() {
+      try {
+        const stamp = String(day || "").replace(/-/g, "");
+        const resp = await fetch(`./img-cache/current/map.json?v=${encodeURIComponent(stamp)}`, {
+          cache: "no-store",
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data || typeof data.items !== "object" || !data.items) return;
+        imageMirrorMap = {
+          ...imageMirrorMap,
+          ...Object.fromEntries(
+            Object.entries(data.items).map(([key, value]) => [String(key), String(value)]),
+          ),
+        };
+        renderGroup();
+      } catch (_err) {
+        // Primary source remains VkusVill CDN.
+      }
+    }
+
+    let sendInFlight = false;
+    function sendAll() {
+      if (sendInFlight) return;
+      sendInFlight = true;
+      clearSendState();
+      const btn = document.getElementById("sendAllBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Отправляем...";
+      }
+      if (tg && tg.MainButton) {
+        tg.MainButton.showProgress(false);
+        tg.MainButton.disable();
+      }
+      const qty = {};
+      for (const item of allRealItems) {
+        qty[item.item_id] = selected[item.item_id] ? 1 : 0;
+      }
+      const payloadOut = { type: "all_choices", day, snapshot_id: snapshotId, qty };
+      savePendingSelection(payloadOut);
+      try {
+        if (!tg || typeof tg.sendData !== "function") {
+          throw new Error("Telegram WebApp API unavailable");
+        }
+        tg.sendData(JSON.stringify(payloadOut));
+        setSendState("Выбор отправлен в текущий batch. Бот пришлет подтверждение с номером batch в чат.", "ok");
+      } catch (err) {
+        const reason = (err && err.message) ? err.message : "unknown";
+        setSendState(
+          `Отправка не сработала (${reason}). Если кнопка упрямится, открой /app заново и повтори.`,
+          "err",
+        );
+      } finally {
+        sendInFlight = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Отправить выбор";
+        }
+        if (tg && tg.MainButton) {
+          tg.MainButton.hideProgress();
+          tg.MainButton.enable();
+          syncTelegramMainButton();
+        }
+      }
+    }
+
+    function bindTapAction(element, handler) {
+      if (!element) return;
+      let lastTs = 0;
+      const wrapped = (event) => {
+        const nowTs = Date.now();
+        if (nowTs - lastTs < 400) return;
+        lastTs = nowTs;
+        if (event && typeof event.preventDefault === "function") event.preventDefault();
+        handler();
+      };
+      element.addEventListener("click", wrapped);
+      element.addEventListener("touchend", wrapped, { passive: false });
+    }
+
+    if (tg && tg.MainButton && typeof tg.MainButton.onClick === "function") {
+      tg.MainButton.onClick(sendAll);
+    }
+
+    bindTapAction(document.getElementById("sendAllBtn"), sendAll);
+    bindTapAction(document.getElementById("clearAllBtn"), clearAllSelection);
+    document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
+    document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
+
+    updateSummary();
+    updateOverview();
+    renderRoundStatus();
+    renderTabs();
+    renderGroup();
+    loadImageMirrorMap();
+    if (pendingSelection && pendingSelection.payload && pendingSelection.payload.day === day && selectedCount() > 0) {
+      setSendState("Нашел несохраненный выбор. Можно спокойно нажать «Отправить выбор» еще раз.", "ok");
+    }
+  </script>
+</body>
+</html>
+
