@@ -893,11 +893,18 @@
     const latestDayRaw = String(latestPayload?.day || latestPayload?.d || "");
     const payloadIsFresh = payloadDayRaw === today;
     const latestIsFresh = latestDayRaw === today;
+    const payloadIsForcedStale = Boolean(payload.force_stale || payload.fs);
+    const latestIsForcedStale = Boolean(latestPayload?.force_stale || latestPayload?.fs);
     let staleNotice = "";
 
-    if (!hasUsefulPayloadData(payload)) {
+    if (latestIsForcedStale && latestIsFresh) {
+      payload = latestPayload || {};
+      staleNotice = String((latestPayload?.round_status || latestPayload?.rs || {}).n || "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.");
+    } else if (!hasUsefulPayloadData(payload)) {
       if (latestIsFresh) payload = latestPayload;
       else staleNotice = "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.";
+    } else if (payloadIsForcedStale) {
+      staleNotice = String((payload.round_status || payload.rs || {}).n || "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.");
     } else if (!payloadIsFresh) {
       if (latestIsFresh) {
         const preservedYour = payload.your || {};
@@ -915,6 +922,7 @@
       const latestIds = new Set(payloadItemIds(latestPayload));
       const payloadContainsUnknownIds = Array.from(payloadIds).some((itemId) => !latestIds.has(itemId));
       const shouldPreferLatest =
+        !payloadIsForcedStale &&
         payloadDay === latestDay &&
         (
           String(payload.snapshot_id || payload.sid || "") !== String(latestPayload.snapshot_id || latestPayload.sid || "") ||
