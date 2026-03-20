@@ -218,3 +218,19 @@
 Делать в одном PR — иначе 63 без 64 оставит бота с 6 товарами.
 
 **Files:** `scripts/vkusvill_collect_discounts.py`
+
+---
+
+## Task 69: Incident fix — заблокировать неканионические копии runtime
+
+**Status:** done
+**Priority:** P0
+
+**Do:** После живого инцидента проверить, что бот отвечает только из канонического `X:\vkusvill-telegram-autobot`, а любые старые копии в `D:` / `Documents` не могут тихо поднять свой `src.main`. Старые `scripts/ensure-bot-running.ps1` должны делегировать в путь из `C:\Users\Sasha\projects\REGISTRY.md`, а старые `src/main.py` — fail-closed с сообщением `Refusing to start from non-canonical workspace`.
+
+**Files:** `src/main.py`, `scripts/ensure-bot-running.ps1`, `src/runtime_guard.py` в старых копиях (`D:` и `Documents`), `C:\Users\Sasha\projects\REGISTRY.md`
+
+**Done when:**
+- В системе жив только один бот из `X:\vkusvill-telegram-autobot`
+- Пробный запуск из `C:\Users\Sasha\Documents\vkusvill-telegram-autobot` не стартует и печатает `Refusing to start from non-canonical workspace`
+- Запуск старого `ensure-bot-running.ps1` делегирует в `X:` и не поднимает отдельный рантайм

@@ -85,3 +85,10 @@
 - `scripts/vkusvill_collect_discounts.py` now fills `stock_qty` only from explicit text markers like `В наличии` / `Осталось`. If the page does not expose a clear stock string, we keep `stock_qty = null` instead of inventing a number.
 - This is intentionally fail-closed UX: no badge is better than a false badge. Mini App should only show a stock chip when we actually know the number.
 - Live recollect on 2026-03-20 confirmed the effect: several inshop items that previously showed false counts (`Пломбир`, `Котлеты`, `Филе грудки индейки`, `Лесные ягоды`, `PROTEIN`, `Оладьи`) now carry `null` stock instead of wrong integers, while items with explicit text still keep real counts.
+
+### Codex - 2026-03-20 (non-canonical runtime incident fix)
+- [critical] The empty `batch #1 пока пуст` answer was not a DB or Mini App write bug. The canonical `X:` store still had votes and `_format_who_chose_text()` returned a valid non-empty summary.
+- Root cause: a stale bot process from `C:\Users\Sasha\Documents\vkusvill-telegram-autobot` was still answering Telegram while `REGISTRY.md` and the scheduled task already pointed to `X:\vkusvill-telegram-autobot`.
+- Fix in place: stale `src.main` processes from `Documents` were killed; the only live runtime is now the healthy `X:` launcher+child pair.
+- Anti-repeat hardening: both stale copies (`D:` and `Documents`) now fail closed in `src/main.py` when the registry points elsewhere, and their `scripts/ensure-bot-running.ps1` delegate into the canonical `X:` workspace instead of starting a second bot.
+- Validation: direct start from `Documents` now prints `Refusing to start from non-canonical workspace`, old watchdog scripts print `delegating watchdog to canonical workspace: X:\vkusvill-telegram-autobot`, and the canonical bot still formats a non-empty `batch #1`.

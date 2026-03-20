@@ -70,3 +70,8 @@
 - Removed the false `data-max` fallback from `stock_qty` extraction in `scripts/vkusvill_collect_discounts.py`; stock badges now appear only when the page exposes an explicit `В наличии/Осталось N шт` text.
 - Added regression coverage in `tests/test_collect_guards.py` so silent fallback to `data-max` cannot return.
 - Ran a fresh live collect, resynced `data/state.db` + `webapp/latest.json`, and republished Pages so Mini App no longer shows invented stock counts for inshop cards.
+
+## 2026-03-20 - Non-canonical runtime incident fix
+- Diagnosed the empty `batch #1 пока пуст` response as a runtime split: Telegram was being served by `C:\Users\Sasha\Documents\vkusvill-telegram-autobot`, while the canonical `X:\vkusvill-telegram-autobot` store still had the real votes.
+- Killed the stale `Documents` bot and confirmed the live runtime is again only the healthy `X:` launcher+child pair.
+- Hardened the stale `D:` and `Documents` repo copies so their `scripts/ensure-bot-running.ps1` delegate into the canonical workspace from `REGISTRY.md` and their `src/main.py` fail-closed with `Refusing to start from non-canonical workspace`.
