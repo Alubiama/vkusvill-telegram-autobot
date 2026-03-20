@@ -489,7 +489,7 @@
 
 ## Task 75: UX -- цены товаров и итого в сводке заказа
 
-**Status:** pending
+**Status:** done
 **Priority:** P1
 
 **Проблема:**
@@ -526,7 +526,7 @@ S8K: 4 поз. · 832.00 RUB
 
 ## Task 76: UX -- компактные карточки товаров в Mini App
 
-**Status:** pending
+**Status:** done
 **Priority:** P1
 
 **Проблема:**
@@ -562,7 +562,7 @@ S8K: 4 поз. · 832.00 RUB
 
 ## Task 77: Hardening — atomic writes для JSON-файлов
 
-**Status:** pending
+**Status:** done
 **Priority:** P1
 
 **Проблема:**
@@ -595,7 +595,7 @@ S8K: 4 поз. · 832.00 RUB
 
 ## Task 78: Hardening — ManualJsonProvider не должен крашиться на битом JSON
 
-**Status:** pending
+**Status:** done
 **Priority:** P1
 
 **Проблема:**
@@ -615,7 +615,7 @@ S8K: 4 поз. · 832.00 RUB
 
 ## Task 79: Ops — ротация backup'ов state.db
 
-**Status:** pending
+**Status:** done
 **Priority:** P2
 
 **Проблема:**
@@ -636,7 +636,7 @@ S8K: 4 поз. · 832.00 RUB
 
 ## Task 80: Hardening — аудит except Exception в bot.py
 
-**Status:** pending
+**Status:** done
 **Priority:** P2
 
 **Проблема:**
