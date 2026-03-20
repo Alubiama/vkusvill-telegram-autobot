@@ -16,6 +16,7 @@ from scripts.vkusvill_collect_discounts import (
     _ensure_disk_headroom,
     _load_today_pool,
     _merge_items_latest,
+    _stock_qty_from_text,
     _write_today_pool,
     _load_existing_items,
     _looks_unavailable_text,
@@ -240,3 +241,7 @@ class CollectGuardsTest(unittest.TestCase):
                 _ensure_disk_headroom(Path(tmp), min_free_mb=500)
 
         self.assertEqual(ctx.exception.code, 2)
+
+    def test_stock_qty_ignores_data_max_when_no_explicit_stock_text(self) -> None:
+        self.assertIsNone(_stock_qty_from_text('Котлеты Домашние', ''))
+        self.assertEqual(_stock_qty_from_text('В наличии 7 шт', ''), 7)

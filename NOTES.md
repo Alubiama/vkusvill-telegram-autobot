@@ -79,3 +79,9 @@
 - Low disk should fail early and readably. We now have both preflight (`ABORT: disk space low`, exit 2) and runtime `disk full on {path}` handling so the bot can explain the failure instead of dumping a traceback.
 - `src/main.py` now has `data/bot.pid` on top of the socket lock. Keep both: socket protects the port, PID lock protects the process model and makes stale duplicate starts visible.
 - Repo hygiene matters operationally here. `.pytest_cache`, repo `__pycache__`, and `out.legacy` were noise only; delete this kind of leftover aggressively when it stops being useful.
+
+### Codex - 2026-03-20 (stock quantity truth fix)
+- [critical] `data-max` on VkusVill cards is not a trustworthy stock source. It can look like a quantity but diverge badly from the real `В наличии N шт` count shown in the app.
+- `scripts/vkusvill_collect_discounts.py` now fills `stock_qty` only from explicit text markers like `В наличии` / `Осталось`. If the page does not expose a clear stock string, we keep `stock_qty = null` instead of inventing a number.
+- This is intentionally fail-closed UX: no badge is better than a false badge. Mini App should only show a stock chip when we actually know the number.
+- Live recollect on 2026-03-20 confirmed the effect: several inshop items that previously showed false counts (`Пломбир`, `Котлеты`, `Филе грудки индейки`, `Лесные ягоды`, `PROTEIN`, `Оладьи`) now carry `null` stock instead of wrong integers, while items with explicit text still keep real counts.

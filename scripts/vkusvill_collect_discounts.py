@@ -126,6 +126,11 @@ def _coalesce_stock_qty(*values: object) -> int | None:
     return None
 
 
+def _stock_qty_from_text(*values: object) -> int | None:
+    merged = " ".join(str(value or "") for value in values if value not in (None, ""))
+    return _extract_stock_qty(merged)
+
+
 def _looks_unavailable_text(*values: object) -> bool:
     markers = (
         "не осталось",
@@ -512,10 +517,7 @@ def _collect_from_dom(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite" if is_favorite else source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_coalesce_stock_qty(
-                    _extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
-                    card.get("maxQty"),
-                ),
+                stock_qty=_stock_qty_from_text(text, card.get("stockText")),
             )
         )
 
@@ -632,10 +634,7 @@ def _collect_from_inshop_modal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=source,
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_coalesce_stock_qty(
-                    _extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
-                    card.get("maxQty"),
-                ),
+                stock_qty=_stock_qty_from_text(text, card.get("stockText")),
             )
         )
 
@@ -748,10 +747,7 @@ def _collect_favorite_from_personal(page, source: str) -> list[DiscountItem]:
                 discount_price=discount,
                 source=f"{source}_favorite",
                 image_url=_normalize_image_url(str(card.get("image") or "")),
-                stock_qty=_coalesce_stock_qty(
-                    _extract_stock_qty(f"{text} {card.get('stockText') or ''}"),
-                    card.get("maxQty"),
-                ),
+                stock_qty=_stock_qty_from_text(text, card.get("stockText")),
             )
         )
         break
@@ -991,10 +987,7 @@ def _collect_offers_ready_food(page, url: str, max_items: int) -> list[DiscountI
                 stock_qty=(
                     0
                     if looks_unavailable
-                    else _coalesce_stock_qty(
-                        _extract_stock_qty(f"{row.get('text') or ''} {row.get('stockText') or ''}"),
-                        row.get("maxQty"),
-                    )
+                    else _stock_qty_from_text(row.get("text"), row.get("stockText"))
                 ),
             )
         )

@@ -65,3 +65,8 @@
 - Updated `.env` and `.env.example` with `COLLECT_MIN_ITEMS=10`.
 - Extended regression coverage in `tests/test_collect_guards.py`, `tests/test_bot_backend_guards.py`, and `tests/test_operational_guards.py`.
 - Cleaned workspace junk from the canonical repo root: `.pytest_cache`, repo `__pycache__`, and `out.legacy`.
+
+## 2026-03-20 - Stock quantity truth fix
+- Removed the false `data-max` fallback from `stock_qty` extraction in `scripts/vkusvill_collect_discounts.py`; stock badges now appear only when the page exposes an explicit `В наличии/Осталось N шт` text.
+- Added regression coverage in `tests/test_collect_guards.py` so silent fallback to `data-max` cannot return.
+- Ran a fresh live collect, resynced `data/state.db` + `webapp/latest.json`, and republished Pages so Mini App no longer shows invented stock counts for inshop cards.
