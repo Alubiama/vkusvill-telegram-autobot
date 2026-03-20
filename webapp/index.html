@@ -391,6 +391,11 @@
       background: #fff1ef;
       color: #963c32;
     }
+    .stock-badge.unknown {
+      border-color: #cdd9c6;
+      background: #f5faf2;
+      color: #55725f;
+    }
     .toggle {
       width: 100%;
       border: 1px solid #cad9cb;
@@ -1487,7 +1492,7 @@
       const groupQty = Number(item.group_qty || 0);
       const soldOut = availabilityStatus === "sold_out" || (stockQty !== null && stockQty <= 0);
       const tomorrowOnly = availabilityStatus === "tomorrow_only";
-      if (stockQty !== null || groupQty > 0 || soldOut || tomorrowOnly) {
+      if (stockQty !== null || groupQty > 0 || soldOut || tomorrowOnly || (!soldOut && !tomorrowOnly)) {
         const stockRow = document.createElement("div");
         stockRow.className = "stock-row";
         if (tomorrowOnly) {
@@ -1503,6 +1508,11 @@
           if (soldOut && !stockQty) {
             stock.textContent = "Нет";
           }
+          stockRow.appendChild(stock);
+        } else {
+          const stock = document.createElement("span");
+          stock.className = "stock-badge unknown";
+          stock.textContent = "Остаток уточняется";
           stockRow.appendChild(stock);
         }
         if (groupQty > 0) {
