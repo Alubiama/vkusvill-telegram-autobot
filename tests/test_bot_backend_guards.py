@@ -119,6 +119,86 @@ class BotBackendGuardsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current.status, "cancelled")
         self.assertIn("отменен", message)
 
+    async def test_collectnow_active_mode_retries_partial_batch(self) -> None:
+        day = self.bot._today()
+        self.store.sync_items(
+            day,
+            [ItemRow("i1", "Item One", 100.0, 80.0, "mock", "", 5)],
+            allow_delete=True,
+        )
+        cycle = self.store.create_cycle(day, "partially_added")
+        self.store.set_vote(day, 1, "User One", "i1", 2, batch_id=cycle.batch_id)
+        self.store.replace_cycle_item_results(
+            day,
+            cycle.batch_id,
+            [
+                {
+                    "item_id": "i1",
+                    "name": "Item One",
+                    "price": 100.0,
+                    "discount_price": 80.0,
+                    "qty": 2,
+                }
+            ],
+        )
+        self.store.apply_executor_results(
+            day,
+            cycle.batch_id,
+            executor_status="partial",
+            ok_count=0,
+            total=1,
+            checks=[
+                {
+                    "item_id": "i1",
+                    "name": "Item One",
+                    "requested_qty": 2,
+                    "before_qty": 0,
+                    "after_qty": 1,
+                    "added_delta": 1,
+                    "ok": False,
+                    "reason": "click_no_effect",
+                }
+            ],
+        )
+        self.bot._send_owner = AsyncMock()
+        self.bot._send = AsyncMock()
+        self.bot._preflight_finalize_session = AsyncMock(return_value=True)
+
+        async def _fake_executor(app, out_path, day, batch_id, notify_chat=True):
+            self.store.apply_executor_results(
+                day,
+                batch_id,
+                executor_status="success",
+                ok_count=1,
+                total=1,
+                checks=[
+                    {
+                        "item_id": "i1",
+                        "name": "Item One",
+                        "requested_qty": 1,
+                        "before_qty": 1,
+                        "after_qty": 2,
+                        "added_delta": 2,
+                        "ok": True,
+                        "reason": "rescued_via_retry",
+                    }
+                ],
+            )
+            return {"ok": True, "status": "success", "ok_count": 1, "total": 1}
+
+        self.bot._run_executor_if_needed = AsyncMock(side_effect=_fake_executor)
+        app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+
+        await self.bot._finalize_impl(app, mode="active")
+
+        self.bot._run_executor_if_needed.assert_awaited_once()
+        current = self.store.get_cycle(day, cycle.batch_id)
+        self.assertIsNotNone(current)
+        self.assertEqual(current.status, "added_waiting_payment")
+        self.assertEqual(self.store.get_meta("last_finalize_outcome"), "added_waiting_payment")
+        first_owner_message = self.bot._send_owner.await_args_list[0].args[1]
+        self.assertIn("добор", first_owner_message)
+
     async def test_scheduled_db_backup_writes_and_prunes_files(self) -> None:
         backup_dir = Path(self.tmpdir.name) / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)

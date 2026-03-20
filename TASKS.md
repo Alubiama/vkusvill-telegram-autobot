@@ -468,3 +468,19 @@
 - Не перезаписывать webapp/latest.json.
 - Не коммитить аудит -- это внутренний документ.
 - Не пропускать пункты со словами "не удалось проверить" -- если нельзя проверить, объяснить почему и дать verdict not_testable.
+
+---
+
+## Task 74: Fix - `collectnow` must resume the current active batch, not only `open`
+
+**Status:** done
+**Priority:** P0
+
+**Do:** After the live incident where the owner button `Собрать заказ в корзину` answered `Сейчас нет open batch для сборки.` while the real batch was `partially_added`, make the collect path active-aware. `collectnow` must collect full payload for `open`, retry only missing positions for `partially_added`, and refuse only when the batch already fully waits for payment or no active batch exists.
+
+**Files:** `src/bot.py`, `tests/test_bot_backend_guards.py`
+
+**Done when:**
+- owner button `Собрать заказ в корзину` works for both `open` and `partially_added`
+- partial retries use missing-only payload and do not duplicate already-added items
+- regression test covers resuming a `partially_added` batch through the active collect flow

@@ -1239,6 +1239,9 @@ class VkusvillGroupBot:
     def _current_cancellable_cycle(self, day: str) -> OrderCycle | None:
         return self._current_open_cycle(day) or self._partial_cycle(day) or self._waiting_payment_cycle(day)
 
+    def _current_collectable_cycle(self, day: str) -> OrderCycle | None:
+        return self._current_open_cycle(day) or self._partial_cycle(day)
+
     def _cancel_open_cycle(self, day: str) -> str:
         cycle = self._current_cancellable_cycle(day)
         if cycle is None:
@@ -3063,10 +3066,10 @@ class VkusvillGroupBot:
             return
 
         if action == "collectnow":
-            await query.answer("Собираю заказ...")
+            await query.answer("Собираю активный batch...")
             if query.message is not None:
                 await query.message.reply_text("Запускаю сбор заказа по текущему срезу.")
-            await self._finalize_impl(context.application, mode="open")
+            await self._finalize_impl(context.application, mode="active")
             return
 
         if action == "more":
@@ -3438,7 +3441,7 @@ class VkusvillGroupBot:
     async def collectnow(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
             return
-        await self._finalize_impl(context.application, mode="open")
+        await self._finalize_impl(context.application, mode="active")
 
     async def retrymissing(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
@@ -3646,12 +3649,6 @@ class VkusvillGroupBot:
                 self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                 return
 
-            await self._send_owner(
-                app,
-                f"Запускаю {('добор недостающего' if mode == 'missing' else 'сбор заказа')}."
-                " Беру текущий срез и сразу добавляю в корзину.",
-            )
-
             if mode == "missing":
                 cycle = self._partial_cycle(day)
                 if cycle is None:
@@ -3660,6 +3657,27 @@ class VkusvillGroupBot:
                     await self._send_owner(app, "Нет batch со статусом «частично добавлен».")
                     return
                 payload = self._build_final_payload(day, cycle.batch_id, only_missing=True)
+                effective_mode = "missing"
+            elif mode == "active":
+                cycle = self._current_collectable_cycle(day)
+                if cycle is None:
+                    waiting = self._waiting_payment_cycle(day)
+                    self.store.set_meta("last_finalize_outcome", "no_open_cycle")
+                    self.store.set_meta("last_finalize_outcome_at", self._now_iso())
+                    if waiting is not None:
+                        await self._send_owner(
+                            app,
+                            f"Сейчас нет недостающих позиций. {self._batch_label(waiting.batch_id)} уже ждет оплаты.",
+                        )
+                    else:
+                        await self._send_owner(app, "Сейчас нет активного batch для сборки.")
+                    return
+                effective_mode = "missing" if cycle.status == "partially_added" else "open"
+                payload = self._build_final_payload(
+                    day,
+                    cycle.batch_id,
+                    only_missing=(effective_mode == "missing"),
+                )
             else:
                 cycle = self._current_open_cycle(day)
                 if cycle is None:
@@ -3675,6 +3693,13 @@ class VkusvillGroupBot:
                         await self._send_owner(app, "Сейчас нет open batch для сборки.")
                     return
                 payload = self._build_final_payload(day, cycle.batch_id, only_missing=False)
+                effective_mode = "open"
+
+            await self._send_owner(
+                app,
+                f"Запускаю {('добор недостающего' if effective_mode == 'missing' else 'сбор заказа')}."
+                " Беру текущий срез и сразу добавляю в корзину.",
+            )
 
             Path(self.settings.out_dir).mkdir(parents=True, exist_ok=True)
             out_path = Path(self.settings.out_dir) / f"order_{day}_b{cycle.batch_id}.json"
@@ -3691,7 +3716,7 @@ class VkusvillGroupBot:
             self.store.set_meta("last_finalize_batch_id", str(cycle.batch_id))
 
             if not payload["items"]:
-                if mode == "missing":
+                if effective_mode == "missing":
                     self.store.update_cycle_status(
                         day,
                         cycle.batch_id,
@@ -3712,7 +3737,7 @@ class VkusvillGroupBot:
                     await self._send(app, f"{self._batch_label(cycle.batch_id)}: никто не выбрал товары.")
                 return
 
-            if mode != "missing":
+            if effective_mode != "missing":
                 self.store.replace_cycle_item_results(day, cycle.batch_id, payload["items"])
 
             self.store.update_cycle_status(

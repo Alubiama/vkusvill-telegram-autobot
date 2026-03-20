@@ -110,3 +110,8 @@
 - [critical] The owner button `Отменить текущий заказ` was wired to `_cancel_open_cycle()`, but that method only allowed status `open`. As soon as the batch moved to `added_waiting_payment`, the button lied and said there was nothing to cancel.
 - `src/bot.py` now treats the current active batch as cancellable across `open`, `partially_added`, and `added_waiting_payment`.
 - For post-finalize states the response text now explicitly says the bot status is cancelled, but the VkusVill cart may still need manual cleanup.
+
+### Codex - 2026-03-20 (collect active batch fix)
+- [critical] The owner button `Собрать заказ в корзину` had the same state-model bug as `cancelcycle`: it still called the `open`-only finalize path, so `partially_added` batches could not be resumed even when missing positions clearly existed.
+- `src/bot.py` now has an active collect flow: for `open` it builds the full payload, for `partially_added` it builds a missing-only payload, and for `added_waiting_payment` it refuses with a truthful "already waiting for payment" message instead of pretending there is no batch.
+- Live recovery on 2026-03-20 confirmed the intended behavior: `batch #3` was resumed from `partially_added`, the missing tail dropped from 10 to 1, and the final retry moved the batch to `added_waiting_payment`.

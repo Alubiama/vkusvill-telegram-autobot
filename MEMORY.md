@@ -1,6 +1,6 @@
 # Project: VkusVill Telegram Autobot
 ## Status: active development
-## Next agent: codex
+## Next agent: claude
 ## Last updated: 2026-03-20 by codex
 
 ## What this project is
@@ -52,7 +52,7 @@ Telegram bot and Mini App for coordinated VkusVill discount ordering. It collect
 - [ ] Monetization
 
 ## What changed last
-Claude wrote Task 73: full system audit (9 blocks, 10 chaos scenarios, 3 TRIZ analyses). Codex should produce audit/AUDIT-2026-03-20.md with verdicts only, no fixes. Claude will review the report and write fix tasks. Previous: Codex completed tasks 57-72 fixing the stale-menu incident. The stale `Documents` runtime is blocked, `CHAT_ID=-1003477471957` is restored in `X:\vkusvill-telegram-autobot\.env` and the live `state.db`, and direct Telegram group delivery works again. On top of that, `src/bot.py` now has two anti-silent guards: `_send()` alerts the owner once per day when group delivery is impossible, and a startup sanity check runs after boot to validate chat binding, owner presence, canonical runtime root, Telegram `get_chat()` access, and current-day snapshot sync, then records `last_startup_sanity_status/detail` in meta. Codex also added `scripts/live_system_audit.py`, a one-shot operator audit that checks runtime processes, the watchdog scheduled task, Telegram API, chat binding, collect meta, and day integrity in one JSON report. Finally, the `cancelcycle` path is no longer `open`-only: it now cancels the current active batch even when the cycle is already `added_waiting_payment` or `partially_added`, which matches the owner menu button semantics. Current live result: canonical runtime OK, scheduled task points to `X:`, Telegram group probe OK, current `batch #1` is detected as cancellable, and the test suite is green (`82 OK`).
+Codex fixed another owner-flow bug in `src/bot.py`: `collectnow` was still `open`-only, so when a live batch moved to `partially_added` the owner button `Собрать заказ в корзину` lied with `Сейчас нет open batch для сборки.` even though there were missing positions to retry. The new behavior is `active`-aware: `collectnow` now retries the current active batch, uses full payload for `open`, uses missing-only payload for `partially_added`, and only refuses when the batch is already fully `added_waiting_payment` or when there is no active batch at all. Regression coverage was added in `tests/test_bot_backend_guards.py`. Live confirmation on 2026-03-20: `batch #3` was in `partially_added`, first retry reduced the missing set from 10 to 1, and the second retry completed the last missing item and moved the batch to `added_waiting_payment`.
 
 ## Open questions
 None right now. See ROADMAP.md for the full plan.

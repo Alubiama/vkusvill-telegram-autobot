@@ -90,3 +90,9 @@
 - `src/bot.py` no longer limits `cancelcycle` to pure `open` batches; the owner cancel path now works for `added_waiting_payment` and `partially_added` too.
 - Updated the owner callback/help copy from "open batch" to "активный batch".
 - Added regression coverage in `tests/test_bot_backend_guards.py` for cancelling waiting-payment and partial cycles.
+
+## 2026-03-20 - Collect active batch fix
+- `src/bot.py` no longer limits `collectnow` to pure `open` batches; the owner collect path now resumes `partially_added` batches with a missing-only payload instead of refusing.
+- Updated the owner callback path to use `mode="active"` so the same button works both for the first collect and for retrying a partial collect without duplicating already-added items.
+- Added regression coverage in `tests/test_bot_backend_guards.py` for resuming a partial batch through the active collect flow.
+- Live recovery confirmed: `batch #3` moved from `partially_added` to `added_waiting_payment` after the active retry flow completed the final missing item.
