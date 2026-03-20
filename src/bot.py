@@ -1236,14 +1236,27 @@ class VkusvillGroupBot:
                 lines.append(f"- {row.user_name}: {self._format_money(float(row.amount))}")
         return "\n".join(lines)
 
+    def _current_cancellable_cycle(self, day: str) -> OrderCycle | None:
+        return self._current_open_cycle(day) or self._partial_cycle(day) or self._waiting_payment_cycle(day)
+
     def _cancel_open_cycle(self, day: str) -> str:
-        cycle = self._current_open_cycle(day)
+        cycle = self._current_cancellable_cycle(day)
         if cycle is None:
-            return "Сейчас нет open batch для отмены."
+            return "Сейчас нет активного batch для отмены."
         self.store.update_cycle_status(day, cycle.batch_id, "cancelled", closed_at=self._now_iso())
+        if cycle.status == "open":
+            return (
+                f"{self._batch_label(cycle.batch_id)} отменен. "
+                "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый open batch."
+            )
+        if cycle.status == "partially_added":
+            return (
+                f"{self._batch_label(cycle.batch_id)} отменен. "
+                "Статус в боте сброшен. Если что-то уже успело попасть в корзину ВкусВилл, убери это вручную."
+            )
         return (
             f"{self._batch_label(cycle.batch_id)} отменен. "
-            "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый open batch."
+            "Статус в боте сброшен. Если товары уже лежат в корзине ВкусВилл, убери их вручную."
         )
 
     def _sanitize_selected_rows(
@@ -3116,7 +3129,7 @@ class VkusvillGroupBot:
             return
 
         if action == "cancelcycle":
-            await query.answer("Отменяю open batch...")
+            await query.answer("Отменяю активный batch...")
             day = self._today()
             cancelled = self._cancel_open_cycle(day)
             if query.message is not None:
@@ -4245,7 +4258,7 @@ class VkusvillGroupBot:
             "/retrymissing - добрать только недостающие позиции (owner)\n"
             "/closecycle - закрыть batch после оплаты (owner)\n"
             "/debts - долги и быстрые отметки оплаты (owner)\n"
-            "/cancelcycle - отменить случайный open batch (owner)\n"
+            "/cancelcycle - отменить текущий активный batch (owner)\n"
             "/cyclestatus - статусы batch-циклов за сегодня (owner)\n"
             "/whochose - кто что выбрал в текущем batch (owner)\n"
             "/daycheck - проверить целостность сегодняшнего набора (owner)\n"

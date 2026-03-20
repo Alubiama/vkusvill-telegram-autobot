@@ -85,3 +85,8 @@
 - Added a startup sanity pass in `src/bot.py` that probes owner/chat binding, canonical runtime root, Telegram `get_chat()`, and basic day snapshot sync, then records `last_startup_sanity_status/detail` and alerts the owner on real startup issues.
 - Added `scripts/live_system_audit.py` as a one-shot operational audit for runtime processes, the watchdog scheduled task, Telegram API reachability, chat binding, collect meta, and day integrity.
 - Added regression coverage in `tests/test_bot_backend_guards.py` for missing `CHAT_ID` owner alerts and startup sanity behavior.
+
+## 2026-03-20 - Cancel active batch fix
+- `src/bot.py` no longer limits `cancelcycle` to pure `open` batches; the owner cancel path now works for `added_waiting_payment` and `partially_added` too.
+- Updated the owner callback/help copy from "open batch" to "активный batch".
+- Added regression coverage in `tests/test_bot_backend_guards.py` for cancelling waiting-payment and partial cycles.

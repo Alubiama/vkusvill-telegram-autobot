@@ -105,3 +105,8 @@
 - `src/bot.py` now runs a startup sanity check and records `last_startup_sanity_status/detail` in meta. It probes `CHAT_ID`, owner, runtime root, Telegram `get_chat()`, current-day DB rows, and `latest.json` day sync before going quiet.
 - `scripts/live_system_audit.py` is the new operator entrypoint for a full live audit. It validates the canonical process pair, scheduled task target, Telegram `getMe/getChat`, chat binding, collect meta, and current day integrity in one JSON output.
 - The audit should separate operational failures from content observations. Today that means the system is healthy even if some stock badges are `null` by design or the regular groups are `[6,2,0]` because only 8 regular items were collected.
+
+### Codex - 2026-03-20 (cancel active cycle fix)
+- [critical] The owner button `Отменить текущий заказ` was wired to `_cancel_open_cycle()`, but that method only allowed status `open`. As soon as the batch moved to `added_waiting_payment`, the button lied and said there was nothing to cancel.
+- `src/bot.py` now treats the current active batch as cancellable across `open`, `partially_added`, and `added_waiting_payment`.
+- For post-finalize states the response text now explicitly says the bot status is cancelled, but the VkusVill cart may still need manual cleanup.

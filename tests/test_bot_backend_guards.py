@@ -96,6 +96,29 @@ class BotBackendGuardsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.get_meta("last_mobile_sessioncheck_status"), "error")
         self.assertIn("expired", self.store.get_meta("last_mobile_sessioncheck_detail") or "")
 
+    def test_cancel_cycle_handles_waiting_payment_batch(self) -> None:
+        day = self.bot._today()
+        cycle = self.store.create_cycle(day, "added_waiting_payment")
+
+        message = self.bot._cancel_open_cycle(day)
+
+        current = self.store.get_cycle(day, cycle.batch_id)
+        self.assertIsNotNone(current)
+        self.assertEqual(current.status, "cancelled")
+        self.assertIn("отменен", message)
+        self.assertIn("корзине", message)
+
+    def test_cancel_cycle_handles_partial_batch(self) -> None:
+        day = self.bot._today()
+        cycle = self.store.create_cycle(day, "partially_added")
+
+        message = self.bot._cancel_open_cycle(day)
+
+        current = self.store.get_cycle(day, cycle.batch_id)
+        self.assertIsNotNone(current)
+        self.assertEqual(current.status, "cancelled")
+        self.assertIn("отменен", message)
+
     async def test_scheduled_db_backup_writes_and_prunes_files(self) -> None:
         backup_dir = Path(self.tmpdir.name) / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
