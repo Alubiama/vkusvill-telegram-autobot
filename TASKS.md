@@ -289,7 +289,7 @@
 
 ## Task 73: Полный аудит системы -- stress test + chaos + TRIZ
 
-**Status:** pending
+**Status:** done
 **Priority:** P0 -- фундамент перед любой новой разработкой
 
 **Контекст:**
@@ -557,3 +557,112 @@ S8K: 4 поз. · 832.00 RUB
 - Текст не обрезается до нечитаемости (минимум 2 строки на название)
 
 **Do NOT:** не убирать картинки совсем -- они помогают узнать товар. Не менять логику выбора/отправки -- только визуал карточки
+
+---
+
+## Task 77: Hardening — atomic writes для JSON-файлов
+
+**Status:** pending
+**Priority:** P1
+
+**Проблема:**
+`scripts/vkusvill_collect_discounts.py` пишет `today_discounts.json`, `today_pool.json`, `today_pool_date.txt` через голый `Path.write_text()`. Если процесс убит в момент записи — файл обрезан, бот читает мусор.
+
+**Do:**
+1. Создать хелпер `_atomic_write(path: Path, content: str)`:
+   ```python
+   import tempfile, os
+   fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+   try:
+       os.write(fd, content.encode("utf-8"))
+       os.close(fd)
+       os.replace(tmp, path)
+   except:
+       os.close(fd)
+       os.unlink(tmp)
+       raise
+   ```
+2. Заменить все `write_text()` в collector на `_atomic_write()` (строки ~1085, 1086, 1698)
+3. В `src/bot.py` найти записи в `webapp/latest.json` — тоже заменить на atomic
+
+**Files:** `scripts/vkusvill_collect_discounts.py`, `src/bot.py`
+
+**Done when:** grep по `write_text` в collector и bot.py для runtime JSON-файлов = 0 результатов. Все пишутся через atomic helper.
+
+**Do NOT:** не трогать write_text для логов или debug-файлов — только data/webapp JSON.
+
+---
+
+## Task 78: Hardening — ManualJsonProvider не должен крашиться на битом JSON
+
+**Status:** pending
+**Priority:** P1
+
+**Проблема:**
+`src/providers.py` строка ~65: `json.loads(Path(self.path).read_text(...))` без try/except. Если `today_discounts.json` битый (обрезан, пустой, невалидный) — бот крашится.
+
+**Do:**
+1. Обернуть `json.loads()` в try/except JSONDecodeError
+2. При ошибке: логировать `WARNING: corrupted JSON at {path}, returning empty list`
+3. Вернуть `[]` — бот покажет stale/empty state вместо crash
+4. Аналогично проверить все остальные `json.loads` / `json.load` в `src/` — если читают runtime-файлы (не конфиги), обернуть
+
+**Files:** `src/providers.py`, проверить `src/bot.py`
+
+**Done when:** вручную записать `{{{` в `data/today_discounts.json`, запустить бот — не крашится, логирует warning, показывает stale state. После теста восстановить валидный JSON.
+
+---
+
+## Task 79: Ops — ротация backup'ов state.db
+
+**Status:** pending
+**Priority:** P2
+
+**Проблема:**
+`data/backups/` накапливает ежедневные копии `state_YYYY-MM-DD.db`. Через год = 365 файлов, ~30MB. Нет ротации.
+
+**Do:**
+1. В `src/bot.py` после создания backup (или в отдельной функции `_rotate_backups()`):
+   - Прочитать все файлы `data/backups/state_*.db`
+   - Удалить те что старше 30 дней (по дате в имени файла, не по mtime)
+   - Логировать `[bot] rotated N old backups, kept M`
+2. Добавить в `.env.example`: `BACKUP_RETENTION_DAYS=30`
+
+**Files:** `src/bot.py`, `.env.example`
+
+**Done when:** создать фейковый backup `data/backups/state_2025-01-01.db`, запустить ротацию — файл удалён. Свежие backup'ы остались.
+
+---
+
+## Task 80: Hardening — аудит except Exception в bot.py
+
+**Status:** pending
+**Priority:** P2
+
+**Проблема:**
+В `src/bot.py` 43 места с `except Exception`. Часть оправданы (Telegram handler не должен ронять весь бот). Часть глотают ошибки молча (`except Exception: pass`).
+
+**Do:**
+1. Пройти все `except Exception` в `src/bot.py` (43 шт) и `src/mobile_api.py` (4 шт)
+2. Классифицировать каждый:
+   - **Оправдан** (Telegram callback handler, graceful degradation) → оставить, но убедиться что есть `logger.exception()` или `logger.warning()`
+   - **Глотает молча** (`except Exception: pass` без лога) → добавить `logger.warning("...", exc_info=True)`
+   - **Слишком широкий** (ловит Exception где надо ловить конкретный тип) → сузить до конкретного exception type
+3. Записать в комментарий рядом с каждым оставленным `except Exception`: `# broad-except: justified — {причина}`
+
+**Files:** `src/bot.py`, `src/mobile_api.py`, `src/main.py`
+
+**Done when:**
+- 0 мест с `except Exception: pass` без логирования
+- Каждый оставленный `except Exception` имеет комментарий-обоснование
+- grep `except Exception.*pass` по src/ = 0 результатов без лога рядом
+
+---
+
+## Cancelled Tasks
+
+### Task 81: ~~datetime timezone awareness~~ — CANCELLED
+**Reason:** бот работает на одной машине, всегда Europe/Moscow. Проблема теоретическая.
+
+### Task 82: ~~Collection file lock~~ — CANCELLED
+**Reason:** COLLECTION_TIMES разнесены на 5 минут, сбор длится ~44 сек. Race condition невозможен при текущей конфигурации.

@@ -28,6 +28,7 @@ def _make_settings(
     *,
     discounts_json_path: str = "data/today_discounts.json",
     collect_min_items: int = 10,
+    db_backup_retention_days: int = 30,
     collection_times: list[dtime] | None = None,
     chat_id: int | None = 111,
     owner_user_id: int | None = 222,
@@ -50,6 +51,7 @@ def _make_settings(
         db_path=db_path,
         out_dir=out_dir,
         out_retention_days=30,
+        db_backup_retention_days=db_backup_retention_days,
         auto_publish_pages=False,
         publish_pages_command=None,
         collect_failover_enabled=False,
@@ -202,20 +204,13 @@ class BotBackendGuardsTest(unittest.IsolatedAsyncioTestCase):
     async def test_scheduled_db_backup_writes_and_prunes_files(self) -> None:
         backup_dir = Path(self.tmpdir.name) / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
-        today = self.bot._today()
-        old_days = [
-            "2026-03-01",
-            "2026-03-02",
-            "2026-03-03",
-            "2026-03-04",
-            "2026-03-05",
-            "2026-03-06",
-            "2026-03-07",
-            "2026-03-08",
-            "2026-03-09",
-        ]
-        for day in old_days:
+        today = datetime.now(self.bot.settings.timezone).date()
+        old_day = (today - timedelta(days=31)).isoformat()
+        kept_day = (today - timedelta(days=30)).isoformat()
+        recent_day = (today - timedelta(days=5)).isoformat()
+        for day in [old_day, kept_day, recent_day]:
             (backup_dir / f"state_{day}.db").write_bytes(b"seed")
+        (backup_dir / "state_startup.db").write_bytes(b"seed")
 
         self.bot._db_backup_dir = lambda: backup_dir
         app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
@@ -223,14 +218,39 @@ class BotBackendGuardsTest(unittest.IsolatedAsyncioTestCase):
 
         await self.bot.scheduled_db_backup(context)
 
-        backup_path = backup_dir / f"state_{today}.db"
+        backup_path = backup_dir / f"state_{self.bot._today()}.db"
         self.assertTrue(backup_path.exists())
         with sqlite3.connect(backup_path) as conn:
             self.assertGreaterEqual(conn.execute("SELECT COUNT(*) FROM items").fetchone()[0], 1)
 
-        dated = sorted(path.name for path in backup_dir.glob("state_*.db"))
-        self.assertEqual(len(dated), 7)
+        self.assertFalse((backup_dir / f"state_{old_day}.db").exists())
+        self.assertTrue((backup_dir / f"state_{kept_day}.db").exists())
+        self.assertTrue((backup_dir / f"state_{recent_day}.db").exists())
+        self.assertTrue((backup_dir / "state_startup.db").exists())
         self.assertEqual(self.store.get_meta("last_db_backup_status"), "ok")
+        self.assertIn("kept=", self.store.get_meta("last_db_backup_detail") or "")
+
+    def test_whochose_summary_shows_prices_and_total(self) -> None:
+        day = self.bot._today()
+        self.store.sync_items(
+            day,
+            [
+                ItemRow("i1", "Item One", 100.0, 80.0, "mock", "", None),
+                ItemRow("i2", "Item Two", 200.0, 150.0, "mock", "", None),
+            ],
+            allow_delete=True,
+        )
+        cycle = self.store.create_cycle(day, "open")
+        self.store.set_vote(day, 1, "Alice", "i1", 1, batch_id=cycle.batch_id)
+        self.store.set_vote(day, 1, "Alice", "i2", 2, batch_id=cycle.batch_id)
+        self.store.set_vote(day, 2, "Bob", "i2", 1, batch_id=cycle.batch_id)
+
+        text = self.bot._format_who_chose_text(day, cycle)
+
+        self.assertIn("Alice: 2 поз. · 380.00 RUB", text)
+        self.assertIn("- Item One: 1 шт · 80.00 RUB", text)
+        self.assertIn("- Item Two: 2 шт · 300.00 RUB", text)
+        self.assertIn("Итого: 3 поз. · 530.00 RUB", text)
 
     def test_mini_app_url_uses_stale_payload_when_today_is_empty(self) -> None:
         url = self.bot._build_mini_app_url(user_id=123)

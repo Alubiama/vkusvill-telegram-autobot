@@ -115,3 +115,9 @@
 - [critical] The owner button `Собрать заказ в корзину` had the same state-model bug as `cancelcycle`: it still called the `open`-only finalize path, so `partially_added` batches could not be resumed even when missing positions clearly existed.
 - `src/bot.py` now has an active collect flow: for `open` it builds the full payload, for `partially_added` it builds a missing-only payload, and for `added_waiting_payment` it refuses with a truthful "already waiting for payment" message instead of pretending there is no batch.
 - Live recovery on 2026-03-20 confirmed the intended behavior: `batch #3` was resumed from `partially_added`, the missing tail dropped from 10 to 1, and the final retry moved the batch to `added_waiting_payment`.
+
+### Codex - 2026-03-20 (full system audit)
+- [critical] `scripts/vkusvill_collect_discounts.py` still writes `today_discounts.json`, `today_pool.json`, and `today_pool_date.txt` with direct `write_text()` calls. That is the remaining half-write risk from the audit.
+- `COLLECTION_TIMES=` currently falls back to `10:00` instead of rejecting empty input; that is a validation gap, not just a UX choice.
+- `src.runtime_guard.describe_runtime_root()` correctly reports a non-canonical root, but the current contract is a runtime status result, not an import-time exception.
+- The collector-side scripts still mix in naive `datetime.now()` calls for run-day logic; keep the timezone assumptions visible whenever you touch that path.

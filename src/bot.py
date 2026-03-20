@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import shutil
+import tempfile
 import zlib
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -481,7 +482,7 @@ class VkusvillGroupBot:
             last_at = datetime.fromisoformat(last_at_raw)
             if last_at.tzinfo is None:
                 last_at = last_at.replace(tzinfo=self.settings.timezone)
-        except Exception:
+        except ValueError:
             self.store.set_meta("autonomy_last_repair_at", self._now_iso())
             return True
 
@@ -866,6 +867,7 @@ class VkusvillGroupBot:
         try:
             await app.bot.send_message(chat_id=owner_id, text=text, **kwargs)
         except Exception:
+            # broad-except: justified - owner alerts are best-effort and must not break the bot.
             LOGGER.warning("Failed to send private owner message: %s", text[:120])
 
     def _trace_webapp(self, message: str) -> None:
@@ -876,8 +878,8 @@ class VkusvillGroupBot:
             ts = datetime.now(self.settings.timezone).strftime("%Y-%m-%d %H:%M:%S")
             with log_path.open("a", encoding="utf-8") as fp:
                 fp.write(f"[{ts}] {message}\n")
-        except Exception:
-            pass
+        except OSError as exc:
+            LOGGER.debug("Webapp trace skipped: %s", exc)
 
     def _cleanup_out_dir(self) -> int:
         days = max(1, int(self.settings.out_retention_days))
@@ -895,7 +897,7 @@ class VkusvillGroupBot:
                 if path.stat().st_mtime < cutoff_ts:
                     path.unlink()
                     removed += 1
-            except Exception:
+            except OSError:
                 continue
 
         # Optional tidy-up: remove empty folders left after file cleanup.
@@ -907,9 +909,9 @@ class VkusvillGroupBot:
             except StopIteration:
                 try:
                     path.rmdir()
-                except Exception:
-                    pass
-            except Exception:
+                except OSError:
+                    continue
+            except OSError:
                 continue
         return removed
 
@@ -926,7 +928,7 @@ class VkusvillGroupBot:
                 if path.stat().st_mtime < cutoff_ts:
                     shutil.rmtree(path, ignore_errors=True)
                     removed += 1
-            except Exception:
+            except OSError:
                 continue
         return removed
 
@@ -942,18 +944,27 @@ class VkusvillGroupBot:
         return Path("data") / "backups"
 
     def _prune_db_backups(self, backup_dir: Path, keep: int = 7) -> int:
-        dated = sorted(
-            [path for path in backup_dir.glob("state_*.db") if path.is_file() and path.name != "state_startup.db"],
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
+        retention_days = max(1, int(keep))
+        cutoff_day = (datetime.now(self.settings.timezone) - timedelta(days=retention_days)).date()
         removed = 0
-        for path in dated[keep:]:
-            try:
-                path.unlink()
-                removed += 1
-            except Exception:
+        for path in backup_dir.glob("state_*.db"):
+            if not path.is_file() or path.name == "state_startup.db":
                 continue
+            match = re.fullmatch(r"state_(\d{4}-\d{2}-\d{2})\.db", path.name)
+            if match is None:
+                continue
+            try:
+                backup_day = datetime.fromisoformat(match.group(1)).date()
+            except ValueError:
+                continue
+            if backup_day < cutoff_day:
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    continue
+        remaining = sum(1 for path in backup_dir.glob("state_*.db") if path.is_file())
+        LOGGER.info("[bot] rotated %s old backups, kept %s", removed, remaining)
         return removed
 
     def backup_state_db(self, backup_name: str) -> Path:
@@ -970,8 +981,9 @@ class VkusvillGroupBot:
         detail = ""
         try:
             dest = self.backup_state_db(backup_name)
-            pruned = self._prune_db_backups(self._db_backup_dir(), keep=7)
-            detail = f"{dest.name}; pruned={pruned}"
+            pruned = self._prune_db_backups(self._db_backup_dir(), keep=self.settings.db_backup_retention_days)
+            kept = sum(1 for path in self._db_backup_dir().glob("state_*.db") if path.is_file())
+            detail = f"{dest.name}; pruned={pruned}; kept={kept}"
             LOGGER.info("DB backup created: %s", dest)
         except Exception as exc:
             status = "error"
@@ -994,7 +1006,7 @@ class VkusvillGroupBot:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=self.settings.timezone)
             return dt.astimezone(self.settings.timezone).strftime("%Y-%m-%d") == self._today()
-        except Exception:
+        except ValueError:
             return False
 
     @staticmethod
@@ -1057,10 +1069,24 @@ class VkusvillGroupBot:
                     lines.append(f"  недобрано: {len(missing)} поз.")
         return "\n".join(lines)
 
-    @staticmethod
-    def _format_selection_preview(selected_rows: list[tuple[str, int]], limit: int = 5) -> str:
+    def _format_selection_preview(self, selected_rows: list[tuple[str, int]], limit: int = 5) -> str:
         preview_rows = selected_rows[:limit]
-        preview = "\n".join([f"- {name}: {qty} шт" for name, qty in preview_rows])
+        rendered: list[str] = []
+        for row in preview_rows:
+            if not row:
+                continue
+            name = str(row[0])
+            qty = int(row[1]) if len(row) > 1 else 0
+            line = f"- {name}: {qty} шт"
+            price_value = row[2] if len(row) > 2 else None
+            try:
+                price_num = float(price_value) if price_value is not None else 0.0
+            except (TypeError, ValueError):
+                price_num = 0.0
+            if price_num > 0:
+                line += f" · {self._format_money(price_num)}"
+            rendered.append(line)
+        preview = "\n".join(rendered)
         extra_count = max(0, len(selected_rows) - limit)
         if extra_count > 0:
             preview = (
@@ -1121,13 +1147,23 @@ class VkusvillGroupBot:
 
         items, _snapshot_source = self._best_available_items(day, restore_into_live=True)
         items_by_id = {str(x.item_id): str(x.name) for x in items}
+        priced_items = {
+            str(row["item_id"]): {
+                "name": str(row["name"] or row["item_id"]),
+                "price": float(row.get("discount_price") or row.get("price") or 0),
+            }
+            for row in self.store.totals_by_item(day, batch_id=cycle.batch_id)
+        }
         by_user: dict[int, dict[str, object]] = {}
         for row in votes:
             user_id = int(row["user_id"])
             user_name = str(row["user_name"] or f"user {user_id}")
             entry = by_user.setdefault(user_id, {"name": user_name, "rows": [], "sum": 0.0})
-            item_name = items_by_id.get(str(row["item_id"]), str(row["item_id"]))
-            entry["rows"].append((item_name, int(row["qty"])))
+            item_id = str(row["item_id"])
+            item_name = items_by_id.get(item_id) or priced_items.get(item_id, {}).get("name") or item_id
+            item_price = float(priced_items.get(item_id, {}).get("price") or 0)
+            qty = int(row["qty"])
+            entry["rows"].append((item_name, qty, item_price * qty if item_price > 0 else 0.0))
         totals_by_user = {
             int(row["user_id"]): float(row.get("total_sum") or 0)
             for row in self.store.totals_by_user(day, batch_id=cycle.batch_id)
@@ -1139,6 +1175,8 @@ class VkusvillGroupBot:
             by_user.values(),
             key=lambda x: (-float(x["sum"]), -len(x["rows"]), str(x["name"]).casefold()),
         )
+        total_positions = sum(len(entry["rows"]) for entry in ordered)
+        total_sum = sum(float(entry["sum"]) for entry in ordered)
         lines = [f"Кто что выбрал в {self._batch_label(cycle.batch_id)}:"]
         for entry in ordered[:20]:
             rows = list(entry["rows"])
@@ -1147,7 +1185,34 @@ class VkusvillGroupBot:
         extra_users = max(0, len(ordered) - 20)
         if extra_users > 0:
             lines.append(f"... и еще {extra_users} чел.")
+        lines.append(f"Итого: {total_positions} поз. · {self._format_money(total_sum)}")
         return "\n".join(lines)[:3900]
+
+    @staticmethod
+    def _atomic_write_text(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=str(path.parent),
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as fp:
+                tmp_path = Path(fp.name)
+                fp.write(content)
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(tmp_path, path)
+        except OSError:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+            raise
 
     def _round_status_payload(self, day: str, latest_override: dict | None = None) -> dict[str, object]:
         autonomy = self._autonomy_status_payload(day, latest_override=latest_override)
@@ -1464,7 +1529,8 @@ class VkusvillGroupBot:
                 if build_id:
                     self.store.set_meta("webapp_build_id", build_id)
                     return build_id
-        except Exception:
+        except (OSError, UnicodeError):
+            # best-effort cache: fall back to the last known build id when the file cannot be read.
             pass
         cached = (self.store.get_meta("webapp_build_id") or "").strip()
         return cached or "unknown"
@@ -1544,7 +1610,7 @@ class VkusvillGroupBot:
             try:
                 fixed = raw.encode("cp1251").decode("utf-8")
                 return fixed
-            except Exception:
+            except UnicodeError:
                 pass
         return raw
 
@@ -1581,7 +1647,7 @@ class VkusvillGroupBot:
             last_at = datetime.fromisoformat(last_at_raw)
             if last_at.tzinfo is None:
                 last_at = last_at.replace(tzinfo=self.settings.timezone)
-        except Exception:
+        except ValueError:
             self.store.set_meta("last_collect_error_notified_at", self._now_iso())
             return True
 
@@ -1607,7 +1673,7 @@ class VkusvillGroupBot:
         for line in reversed(lines):
             try:
                 parsed = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
                 continue
             if isinstance(parsed, dict):
                 return parsed
@@ -1618,7 +1684,7 @@ class VkusvillGroupBot:
                 parsed = json.loads(text[start : end + 1])
                 if isinstance(parsed, dict):
                     return parsed
-            except Exception:
+            except json.JSONDecodeError:
                 return None
         return None
 
@@ -2088,7 +2154,7 @@ class VkusvillGroupBot:
         map_path = Path("webapp") / "img-cache" / "current" / "map.json"
         try:
             raw = json.loads(map_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             return {}
         items = raw.get("items")
         if not isinstance(items, dict):
@@ -2259,13 +2325,13 @@ class VkusvillGroupBot:
         out_path = Path("webapp") / "latest.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         payload = self._build_public_webapp_snapshot(day, items)
-        out_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        self._atomic_write_text(out_path, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
     def _write_webapp_stale_snapshot(self, day: str, note: str) -> None:
         out_path = Path("webapp") / "latest.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         payload = self._build_public_webapp_stale_snapshot(day, note)
-        out_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        self._atomic_write_text(out_path, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
     @staticmethod
     def _encode_webapp_payload(payload: dict) -> str:
@@ -3919,8 +3985,8 @@ class VkusvillGroupBot:
                     ),
                     encoding="utf-8",
                 )
-            except Exception:
-                pass
+            except OSError as exc:
+                LOGGER.debug("Skipping executor log write: %s", exc)
 
             if isinstance(payload, dict):
                 if payload.get("error"):
@@ -4341,8 +4407,8 @@ class VkusvillGroupBot:
             removed_profiles = self._cleanup_temp_profiles()
             if removed_profiles > 0:
                 LOGGER.info("Startup temp profile cleanup removed %s stale dir(s)", removed_profiles)
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.debug("Startup cleanup skipped: %s", exc)
         try:
             recovery_note = self._recover_cycles_on_startup()
             if recovery_note:

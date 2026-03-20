@@ -95,7 +95,7 @@ def _install_pid_lock(project_root: Path) -> Path | None:
     if pid_path.exists():
         try:
             existing_pid = int(pid_path.read_text(encoding="utf-8").strip())
-        except Exception:
+        except ValueError:
             existing_pid = 0
         if existing_pid and existing_pid != current_pid and _pid_is_alive(existing_pid):
             logging.error("[bot] already running, pid=%s", existing_pid)
@@ -108,7 +108,7 @@ def _install_pid_lock(project_root: Path) -> Path | None:
         try:
             if pid_path.exists() and pid_path.read_text(encoding="utf-8").strip() == str(current_pid):
                 pid_path.unlink()
-        except Exception:
+        except OSError:
             logging.warning("Failed to remove pid lock: %s", pid_path)
 
     atexit.register(_cleanup_pid)
@@ -154,6 +154,7 @@ def main() -> None:
             backup_path = service.backup_state_db("state_startup.db")
             logging.info("Startup DB backup created: %s", backup_path)
         except Exception as exc:
+            # broad-except: justified - startup backup is best-effort and must not block the bot.
             logging.warning("Startup DB backup failed: %s", exc)
         try:
             logging.info("Starting bot polling (attempt=%s)", attempt)
@@ -173,6 +174,7 @@ def main() -> None:
             )
             time.sleep(wait_sec)
         except Exception as exc:
+            # broad-except: justified - keep the polling loop alive on unexpected runtime failures.
             wait_sec = _backoff_sleep_seconds(attempt)
             logging.exception("Bot polling crashed. Restart in %s sec.", wait_sec)
             time.sleep(wait_sec)

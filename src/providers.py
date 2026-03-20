@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import subprocess
 import re
@@ -13,6 +14,9 @@ from pathlib import Path
 from .command_utils import command_to_args, project_root
 from .config import Settings
 from .store import ItemRow
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -125,7 +129,11 @@ class ManualJsonProvider(BaseProvider):
         self.path = path
 
     def fetch(self, now: datetime) -> list[DiscountItem]:
-        payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            LOGGER.warning("corrupted JSON at %s, returning empty list", self.path)
+            return []
         items: list[DiscountItem] = []
         for item in payload:
             name = str(item["name"]).strip()

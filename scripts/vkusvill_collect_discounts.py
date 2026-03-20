@@ -4,6 +4,7 @@ import argparse
 import errno
 import hashlib
 import json
+import tempfile
 import os
 import re
 import shutil
@@ -1066,6 +1067,27 @@ def _pool_paths(out_path: Path) -> tuple[Path, Path]:
     return out_path.with_name("today_pool.json"), out_path.with_name("today_pool_date.txt")
 
 
+def _atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f"{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _load_today_pool(out_path: Path, run_day: str) -> list[DiscountItem]:
     pool_path, date_path = _pool_paths(out_path)
     if not pool_path.exists() or not date_path.exists():
@@ -1082,8 +1104,8 @@ def _load_today_pool(out_path: Path, run_day: str) -> list[DiscountItem]:
 def _write_today_pool(out_path: Path, run_day: str, items: list[DiscountItem]) -> None:
     pool_path, date_path = _pool_paths(out_path)
     payload = [item.as_dict() for item in items]
-    pool_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    date_path.write_text(run_day, encoding="utf-8")
+    _atomic_write(pool_path, json.dumps(payload, ensure_ascii=False, indent=2))
+    _atomic_write(date_path, run_day)
 
 
 def _open_discounts_area(page) -> None:
@@ -1695,7 +1717,7 @@ def main() -> None:
         raise SystemExit("No discounts detected. Check login status and page selectors.")
 
     payload = [item.as_dict() for item in items]
-    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(out_path, json.dumps(payload, ensure_ascii=False, indent=2))
     _write_today_pool(out_path, run_day, items)
     print(json.dumps(payload, ensure_ascii=False))
 
