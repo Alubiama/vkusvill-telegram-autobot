@@ -758,6 +758,85 @@ class VkusvillGroupBot:
         self.store.set_meta(meta_key, fingerprint)
         await self._send_owner(app, text)
 
+    async def _run_startup_sanity_check(self, app: Application) -> dict[str, object]:
+        day = self._today()
+        runtime_root = self._runtime_root_payload()
+        report = self._assess_day_integrity(day)
+        issues: list[str] = []
+        warnings: list[str] = []
+
+        owner_id = self._get_owner_user_id()
+        chat_id = self._get_chat_id()
+        if owner_id is None:
+            issues.append("OWNER_USER_ID не задан")
+        if chat_id is None:
+            issues.append("CHAT_ID не привязан")
+
+        if runtime_root["state"] == "error":
+            issues.append(f"runtime root error: {runtime_root['detail']}")
+        elif runtime_root["state"] == "warning":
+            warnings.append(f"runtime root warning: {runtime_root['detail']}")
+
+        collect_ok, collect_note = self._collect_is_verified_for_app(day)
+        if not collect_ok:
+            warnings.append(collect_note)
+
+        items = list(report["items"])
+        latest_day = str(report["latest_day"] or "")
+        missing_in_latest = list(report["missing_in_latest"])
+        if not items:
+            issues.append("в базе нет товаров за сегодня")
+        if latest_day != day:
+            issues.append(f"latest.json не синхронизирован по дню ({latest_day or 'n/a'} vs {day})")
+        if missing_in_latest:
+            issues.append(f"latest.json отстает от базы: {len(missing_in_latest)} item_id")
+
+        if chat_id is not None:
+            try:
+                chat = await app.bot.get_chat(chat_id)
+                self.store.set_meta("startup_chat_probe_at", self._now_iso())
+                self.store.set_meta("startup_chat_probe_status", "ok")
+                self.store.set_meta("startup_chat_probe_title", str(getattr(chat, "title", "") or ""))
+            except Exception as exc:
+                detail = self._repair_mojibake(str(exc))[:200]
+                self.store.set_meta("startup_chat_probe_at", self._now_iso())
+                self.store.set_meta("startup_chat_probe_status", "error")
+                self.store.set_meta("startup_chat_probe_title", "")
+                issues.append(f"Telegram get_chat({chat_id}) failed: {detail}")
+        else:
+            self.store.set_meta("startup_chat_probe_at", self._now_iso())
+            self.store.set_meta("startup_chat_probe_status", "error")
+            self.store.set_meta("startup_chat_probe_title", "")
+
+        status = "ok"
+        if issues:
+            status = "critical"
+        elif warnings:
+            status = "warning"
+        detail = " | ".join((issues + warnings)[:6]) if (issues or warnings) else "ok"
+        self.store.set_meta("last_startup_sanity_at", self._now_iso())
+        self.store.set_meta("last_startup_sanity_status", status)
+        self.store.set_meta("last_startup_sanity_detail", detail)
+
+        if issues or warnings:
+            lines = [
+                f"Startup sanity {day}: {status.upper()}",
+            ]
+            lines.extend([f"- critical: {msg}" for msg in issues[:4]])
+            lines.extend([f"- warning: {msg}" for msg in warnings[:4]])
+            await self._alert_owner_once(app, "startup_sanity", "\n".join(lines)[:3900])
+
+        return {
+            "status": status,
+            "issues": issues,
+            "warnings": warnings,
+            "day": day,
+            "chat_id": chat_id,
+        }
+
+    async def scheduled_startup_sanity(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._run_startup_sanity_check(context.application)
+
     async def _send(self, app: Application, text: str, **kwargs) -> None:
         chat_id = self._get_chat_id()
         if chat_id is None:
@@ -4305,6 +4384,11 @@ class VkusvillGroupBot:
             interval=30 * 60,
             first=180,
             name="autonomy-watchdog",
+        )
+        app.job_queue.run_once(
+            self.scheduled_startup_sanity,
+            when=20,
+            name="startup-sanity",
         )
         self._schedule_startup_collect_if_needed(app)
         return app

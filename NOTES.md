@@ -99,3 +99,9 @@
 - Restored that id into `X:\vkusvill-telegram-autobot\.env` and the live `data/state.db`, then verified a direct `send_message` succeeds to the group.
 - `src/bot.py` now no longer fails silently for group delivery: `_send()` warns the owner once per day when `CHAT_ID` is missing, and also warns the owner if Telegram rejects a group send.
 - The bot was restarted after the fix, so the live runtime now carries both the restored `CHAT_ID` config and the new owner-alert guard.
+
+### Codex - 2026-03-20 (proactive live audit hardening)
+- [critical] One-off fixes were not enough; the real gap was the absence of a single system-level audit that checks runtime, Telegram, DB, and Mini App together.
+- `src/bot.py` now runs a startup sanity check and records `last_startup_sanity_status/detail` in meta. It probes `CHAT_ID`, owner, runtime root, Telegram `get_chat()`, current-day DB rows, and `latest.json` day sync before going quiet.
+- `scripts/live_system_audit.py` is the new operator entrypoint for a full live audit. It validates the canonical process pair, scheduled task target, Telegram `getMe/getChat`, chat binding, collect meta, and current day integrity in one JSON output.
+- The audit should separate operational failures from content observations. Today that means the system is healthy even if some stock badges are `null` by design or the regular groups are `[6,2,0]` because only 8 regular items were collected.

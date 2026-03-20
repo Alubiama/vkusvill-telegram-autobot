@@ -29,11 +29,13 @@ def _make_settings(
     discounts_json_path: str = "data/today_discounts.json",
     collect_min_items: int = 10,
     collection_times: list[dtime] | None = None,
+    chat_id: int | None = 111,
+    owner_user_id: int | None = 222,
 ) -> Settings:
     return Settings(
         bot_token="123:abc",
-        chat_id=111,
-        owner_user_id=222,
+        chat_id=chat_id,
+        owner_user_id=owner_user_id,
         timezone=ZoneInfo("Europe/Moscow"),
         telegram_proxy_url=None,
         collection_times=collection_times or [dtime(10, 0)],
@@ -229,3 +231,39 @@ class BotBackendGuardsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.bot._should_notify_low_item_count(day, 6))
         self.assertFalse(self.bot._should_notify_low_item_count(day, 6))
         self.assertTrue(self.bot._should_notify_low_item_count(day, 7))
+
+    async def test_send_missing_chat_id_alerts_owner_once(self) -> None:
+        bot = VkusvillGroupBot(
+            _make_settings(self.db_path, self.out_dir, chat_id=None, owner_user_id=222),
+            self.store,
+            MockProvider(),
+        )
+        app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+
+        await bot._send(app, "hello group")
+        await bot._send(app, "hello again")
+
+        app.bot.send_message.assert_awaited_once()
+        kwargs = app.bot.send_message.await_args.kwargs
+        self.assertEqual(kwargs["chat_id"], 222)
+        self.assertIn("CHAT_ID не привязан", kwargs["text"])
+
+    async def test_startup_sanity_reports_missing_chat_binding(self) -> None:
+        day = self.bot._today()
+        self.store.sync_items(
+            day,
+            [ItemRow("today_1", "Today", 100.0, 80.0, "mock", "", None)],
+            allow_delete=True,
+        )
+        bot = VkusvillGroupBot(
+            _make_settings(self.db_path, self.out_dir, chat_id=None, owner_user_id=222),
+            self.store,
+            MockProvider(),
+        )
+        app = SimpleNamespace(bot=SimpleNamespace(get_chat=AsyncMock(), send_message=AsyncMock()))
+
+        result = await bot._run_startup_sanity_check(app)
+
+        self.assertEqual(result["status"], "critical")
+        self.assertTrue(any("CHAT_ID не привязан" in item for item in result["issues"]))
+        app.bot.send_message.assert_awaited_once()

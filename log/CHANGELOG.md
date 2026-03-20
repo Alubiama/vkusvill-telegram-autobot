@@ -80,3 +80,8 @@
 - Restored the missing group binding in the canonical `X:` runtime: `CHAT_ID=-1003477471957` is back in `.env` and `data/state.db`.
 - Confirmed direct Telegram delivery to the group succeeds again after the restore.
 - Updated `src/bot.py` so `_send()` no longer silently drops group messages when `CHAT_ID` is empty or Telegram rejects a send; the owner now gets an explicit alert instead.
+
+## 2026-03-20 - Startup sanity + live system audit
+- Added a startup sanity pass in `src/bot.py` that probes owner/chat binding, canonical runtime root, Telegram `get_chat()`, and basic day snapshot sync, then records `last_startup_sanity_status/detail` and alerts the owner on real startup issues.
+- Added `scripts/live_system_audit.py` as a one-shot operational audit for runtime processes, the watchdog scheduled task, Telegram API reachability, chat binding, collect meta, and day integrity.
+- Added regression coverage in `tests/test_bot_backend_guards.py` for missing `CHAT_ID` owner alerts and startup sanity behavior.
