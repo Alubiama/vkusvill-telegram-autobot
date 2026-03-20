@@ -75,3 +75,8 @@
 - Diagnosed the empty `batch #1 пока пуст` response as a runtime split: Telegram was being served by `C:\Users\Sasha\Documents\vkusvill-telegram-autobot`, while the canonical `X:\vkusvill-telegram-autobot` store still had the real votes.
 - Killed the stale `Documents` bot and confirmed the live runtime is again only the healthy `X:` launcher+child pair.
 - Hardened the stale `D:` and `Documents` repo copies so their `scripts/ensure-bot-running.ps1` delegate into the canonical workspace from `REGISTRY.md` and their `src/main.py` fail-closed with `Refusing to start from non-canonical workspace`.
+
+## 2026-03-20 - Group delivery restored + anti-silent-send guard
+- Restored the missing group binding in the canonical `X:` runtime: `CHAT_ID=-1003477471957` is back in `.env` and `data/state.db`.
+- Confirmed direct Telegram delivery to the group succeeds again after the restore.
+- Updated `src/bot.py` so `_send()` no longer silently drops group messages when `CHAT_ID` is empty or Telegram rejects a send; the owner now gets an explicit alert instead.

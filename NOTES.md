@@ -92,3 +92,10 @@
 - Fix in place: stale `src.main` processes from `Documents` were killed; the only live runtime is now the healthy `X:` launcher+child pair.
 - Anti-repeat hardening: both stale copies (`D:` and `Documents`) now fail closed in `src/main.py` when the registry points elsewhere, and their `scripts/ensure-bot-running.ps1` delegate into the canonical `X:` workspace instead of starting a second bot.
 - Validation: direct start from `Documents` now prints `Refusing to start from non-canonical workspace`, old watchdog scripts print `delegating watchdog to canonical workspace: X:\vkusvill-telegram-autobot`, and the canonical bot still formats a non-empty `batch #1`.
+
+### Codex - 2026-03-20 (group delivery restored)
+- [critical] The live `X:` runtime had no group binding at all: `CHAT_ID=` in `.env`, no `chat_id` in `state.db`, and direct Telegram send failed with `BadRequest Chat_id is empty`.
+- The last working group id was recovered from the old `Documents` state DB: `-1003477471957`.
+- Restored that id into `X:\vkusvill-telegram-autobot\.env` and the live `data/state.db`, then verified a direct `send_message` succeeds to the group.
+- `src/bot.py` now no longer fails silently for group delivery: `_send()` warns the owner once per day when `CHAT_ID` is missing, and also warns the owner if Telegram rejects a group send.
+- The bot was restarted after the fix, so the live runtime now carries both the restored `CHAT_ID` config and the new owner-alert guard.

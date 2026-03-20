@@ -234,3 +234,19 @@
 - В системе жив только один бот из `X:\vkusvill-telegram-autobot`
 - Пробный запуск из `C:\Users\Sasha\Documents\vkusvill-telegram-autobot` не стартует и печатает `Refusing to start from non-canonical workspace`
 - Запуск старого `ensure-bot-running.ps1` делегирует в `X:` и не поднимает отдельный рантайм
+
+---
+
+## Task 70: Fix — вернуть `CHAT_ID` и убрать тихий провал отправки в группу
+
+**Status:** done
+**Priority:** P0
+
+**Do:** После миграции на `X:` проверить, что групповой `CHAT_ID` не потерялся. Если он пустой, восстановить его из старого рабочего state/meta, прописать в `X:\vkusvill-telegram-autobot\.env` и в живую `state.db`, затем подтвердить прямой `send_message` в группу. В `src/bot.py` убрать тихий провал `_send()`: при пустом `CHAT_ID` или ошибке Telegram бот должен предупредить владельца, а не молча "съесть" сообщение.
+
+**Files:** `.env`, `data/state.db`, `src/bot.py`
+
+**Done when:**
+- Прямой `send_message` в привязанную группу проходит
+- В `X:` есть `CHAT_ID=-1003477471957`
+- `_send()` больше не молчит при пустом chat binding или ошибке отправки

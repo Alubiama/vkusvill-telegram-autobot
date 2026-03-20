@@ -750,12 +750,35 @@ class VkusvillGroupBot:
         await update.message.reply_text(f"Только владелец может это сделать. OWNER_USER_ID={owner_id}")
         return False
 
+    async def _alert_owner_once(self, app: Application, key: str, text: str) -> None:
+        fingerprint = f"{self._today()}|{key}|{text[:120]}"
+        meta_key = f"alert_once:{key}"
+        if (self.store.get_meta(meta_key) or "") == fingerprint:
+            return
+        self.store.set_meta(meta_key, fingerprint)
+        await self._send_owner(app, text)
+
     async def _send(self, app: Application, text: str, **kwargs) -> None:
         chat_id = self._get_chat_id()
         if chat_id is None:
             LOGGER.warning("Chat is not bound yet, message skipped: %s", text[:80])
+            await self._alert_owner_once(
+                app,
+                "missing_chat_id",
+                "⚠️ CHAT_ID не привязан. Групповые сообщения сейчас не отправляются. Проверь `.env` или выполни /bind в нужной группе.",
+            )
             return
-        await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
+        try:
+            await app.bot.send_message(chat_id=chat_id, text=text, **kwargs)
+        except Exception as exc:
+            detail = self._repair_mojibake(str(exc))[:240]
+            LOGGER.warning("Failed to send group message to chat_id=%s: %s", chat_id, detail)
+            await self._alert_owner_once(
+                app,
+                "group_send_failed",
+                f"⚠️ Не удалось отправить сообщение в группу {chat_id}: {detail}",
+            )
+            raise
 
     async def _send_owner(self, app: Application, text: str, **kwargs) -> None:
         owner_id = self._get_owner_user_id()
