@@ -939,7 +939,7 @@
           type: "group",
         });
       }
-      return { groups, favorite: favorites.slice(0, 1), readyFood };
+      return { groups, favorite: favorites, readyFood };
     }
 
     let groups = [];
@@ -972,7 +972,7 @@
           type: "group",
         };
       });
-      favoriteItems = compactFavorite.map(mapItem).filter(validItem).slice(0, 1);
+      favoriteItems = compactFavorite.map(mapItem).filter(validItem);
       readyFoodItems = compactReadyFood.map(mapItem).filter(validItem);
     } else if (payloadGroups.length) {
       groups = [0, 1, 2].map((idx) => {
@@ -985,7 +985,7 @@
           type: "group",
         };
       });
-      favoriteItems = payloadFavorite.slice(0, 1);
+        favoriteItems = payloadFavorite;
       readyFoodItems = payloadReadyFood;
     } else {
       const fb = fallbackGroupsFromItems(fallbackItems);
@@ -998,7 +998,7 @@
     if (favoriteItems.length) {
       tabs.push({
         id: "favorite",
-        title: "Любимый",
+        title: "Любимые товары",
         items: favoriteItems,
         type: "favorite",
       });
@@ -1027,7 +1027,7 @@
     }
     for (const item of favoriteItems) {
       if (!item?.item_id) continue;
-      sourceLabelById.set(item.item_id, "Любимый");
+        sourceLabelById.set(item.item_id, "Любимые");
     }
     for (const item of readyFoodItems) {
       if (!item?.item_id) continue;
@@ -1040,7 +1040,7 @@
       const regularCount = Number(payload.regular_count ?? payload.rc ?? groups.reduce((acc, g) => acc + g.items.length, 0));
       const regularCapacity = Number(payload.regular_capacity ?? payload.cap ?? 18);
       const parts = [`${regularCount}/${regularCapacity} скидок`];
-      if (favoriteItems.length) parts.push("любимый");
+        if (favoriteItems.length) parts.push(`любимые ${favoriteItems.length}`);
       if (readyFoodItems.length) parts.push(`еда ${readyFoodItems.length}`);
       el.textContent = parts.join(" · ");
     }
@@ -1290,7 +1290,7 @@
       const selectedText = selectedInTab > 0 ? ` · выбрано ${selectedInTab}` : "";
       if (tab.type === "type_view") return `${tab.title} · ${tab.items.length} товаров из скидочного набора${selectedText}`;
       if (tab.type === "group") return `${tab.title} · ${tab.items.length} из 6 товаров${selectedText}`;
-      if (tab.type === "favorite") return `Любимый товар дня${selectedText}`;
+        if (tab.type === "favorite") return `Любимые товары дня${selectedText}`;
       if (tab.type === "ready_food") {
         const pages = Math.max(1, Math.ceil((tab.items.length || 0) / READY_FOOD_PAGE_SIZE));
         return `Готовая еда · ${tab.items.length} товаров · страница ${readyFoodPage + 1} из ${pages}${selectedText}`;
@@ -1349,7 +1349,7 @@
         }
         return;
       }
-      const labels = { g1: "1-я", g2: "2-я", g3: "3-я", favorite: "Любимый", ready_food: "Еда" };
+      const labels = { g1: "1-я", g2: "2-я", g3: "3-я", favorite: "Любимые", ready_food: "Еда" };
       for (const tab of tabs) {
         const btn = document.createElement("button");
         btn.className = `tab${tab.id === activeTab ? " active" : ""}`;
@@ -1435,9 +1435,9 @@
       const isFavorite = src.includes("favorite") || src.includes("fav") || String(item.item_id || "").startsWith("fav_");
       const isReadyFood = src.startsWith("vkusvill_offers_ready_food");
       const sourceBaseLabel = sourceLabelById.get(item.item_id)
-        || (isFavorite ? "Любимый" : isReadyFood ? "Готовая еда" : "Подборка");
-      const sourceLabel = sourceBaseLabel === "Любимый"
-        ? "❤️ Любимый"
+          || (isFavorite ? "Любимые" : isReadyFood ? "Готовая еда" : "Подборка");
+        const sourceLabel = sourceBaseLabel === "Любимые"
+          ? "❤️ Любимые"
         : sourceBaseLabel === "Готовая еда"
           ? "🍱 Готовая еда"
           : `🏷️ ${sourceBaseLabel}`;
