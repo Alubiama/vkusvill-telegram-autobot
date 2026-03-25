@@ -579,10 +579,10 @@
 
     <section class="card round-status idle" id="roundStatusCard">
       <div class="round-copy">
-        <div class="round-title" id="roundStatusTitle">Новый раунд готов</div>
-        <div class="round-sub" id="roundStatusSub">Можно выбирать товары.</div>
+        <div class="round-title" id="roundStatusTitle">Можно редактировать</div>
+        <div class="round-sub" id="roundStatusSub">Выбирай товары и меняй выбор, пока окно открыто.</div>
       </div>
-      <div class="round-badge" id="roundStatusBadge">Готово</div>
+      <div class="round-badge" id="roundStatusBadge">Открыто</div>
     </section>
 
     <section class="card">
@@ -1181,6 +1181,11 @@
     function syncTelegramMainButton() {
       if (!tg || !tg.MainButton) return;
       const count = selectedCount();
+      const kind = currentRoundKind();
+      if (kind !== "open" && kind !== "idle") {
+        tg.MainButton.hide();
+        return;
+      }
       tg.MainButton.setText(count > 0 ? `Отправить выбор (${count})` : "Отправить выбор");
       if (count > 0) tg.MainButton.show();
       else tg.MainButton.hide();
@@ -1199,6 +1204,11 @@
       syncTelegramMainButton();
     }
 
+    function currentRoundKind() {
+      const state = roundStatus && typeof roundStatus === "object" ? roundStatus : {};
+      return String(state.k || "idle");
+    }
+
     function renderRoundStatus() {
       const card = document.getElementById("roundStatusCard");
       const title = document.getElementById("roundStatusTitle");
@@ -1210,34 +1220,39 @@
       card.className = `card round-status ${kind}`;
       const mapped = {
         open: {
-          title: "Можно выбирать товары",
-          sub: "Раунд открыт. Отмечай нужное и отправляй выбор, пока он активен.",
-          badge: "Открыто",
+          title: "Можно редактировать",
+          sub: "Раунд открыт. Меняй выбор, пока окно активно.",
+          badge: "Можно редактировать",
         },
         finalizing: {
-          title: "Раунд почти собран",
-          sub: "Сейчас идет финальная сверка. Выбор еще можно дополнять, если раунд не закрыт.",
-          badge: "Сборка",
+          title: "Сейчас только просмотр",
+          sub: "Идёт финальная сверка. Новые изменения временно не сохраняем.",
+          badge: "Просмотр",
+        },
+        waiting: {
+          title: "Заказ собран",
+          sub: "Товары уже в корзине. Ждём оплаты владельцем.",
+          badge: "Собран",
         },
         partially_added: {
-          title: "Часть товаров уже в корзине",
-          sub: "Что-то уже добавлено, а остальное можно добрать или снять перед отправкой.",
-          badge: "Частично",
+          title: "Часть уже в корзине",
+          sub: "Что-то уже добавлено. Если нужно поменять выбор, дождись нового раунда.",
+          badge: "Часть собрана",
         },
         added_waiting_payment: {
-          title: "Заказ собран, ждем оплату",
-          sub: "Товары уже в корзине. Осталось дождаться оплаты, чтобы не сбить текущий цикл.",
-          badge: "Оплата",
+          title: "Заказ собран",
+          sub: "Товары уже в корзине. Осталось дождаться оплаты.",
+          badge: "Собран",
         },
         closed: {
-          title: "Раунд закрыт",
-          sub: "Новые товары сейчас не принимаются. Можно только посмотреть итог или дождаться следующего раунда.",
-          badge: "Закрыто",
+          title: "Сейчас только просмотр",
+          sub: "Изменения больше не сохраняются. Дождись нового раунда.",
+          badge: "Просмотр",
         },
         idle: {
-          title: "Новый раунд готов",
-          sub: "Можно выбирать товары.",
-          badge: "Готово",
+          title: "Можно редактировать",
+          sub: "Новый раунд готов. Можно выбирать товары.",
+          badge: "Открыто",
         },
       };
       const fallback = mapped[kind] || mapped.idle;
@@ -1663,6 +1678,10 @@
     let sendInFlight = false;
     function sendAll() {
       if (sendInFlight) return;
+      if (currentRoundKind() !== "open" && currentRoundKind() !== "idle") {
+        setSendState("Сейчас только просмотр. Дождись нового раунда и открой /app заново.", "err");
+        return;
+      }
       sendInFlight = true;
       clearSendState();
       const btn = document.getElementById("sendAllBtn");
@@ -1685,11 +1704,11 @@
           throw new Error("Telegram WebApp API unavailable");
         }
         tg.sendData(JSON.stringify(payloadOut));
-        setSendState("Выбор отправлен в текущий batch. Бот пришлет подтверждение с номером batch в чат.", "ok");
+        setSendState("Выбор отправлен. Бот пришлёт подтверждение в чат.", "ok");
       } catch (err) {
         const reason = (err && err.message) ? err.message : "unknown";
         setSendState(
-          `Отправка не сработала (${reason}). Если кнопка упрямится, открой /app заново и повтори.`,
+          `Отправка не сработала (${reason}). Открой /app заново и повтори.`,
           "err",
         );
       } finally {
