@@ -714,23 +714,36 @@
       const first = expandImageUrl(raw);
       const out = [];
       const mirrorPath = imageMirrorMap[String(itemId || "")] || "";
+      const cacheBust = String(snapshotId || day || payload?.sid || payload?.snapshot_id || "");
+      const addCacheBust = (value) => {
+        if (!value) return value;
+        const rawValue = String(value);
+        if (!cacheBust) return rawValue;
+        const [path, query = ""] = rawValue.split("?");
+        const suffix = query ? `${query}&v=${encodeURIComponent(cacheBust)}` : `v=${encodeURIComponent(cacheBust)}`;
+        return `${path}?${suffix}`;
+      };
       if (mirrorPath) {
         if (mirrorPath.startsWith("http://") || mirrorPath.startsWith("https://")) {
-          if (!out.includes(mirrorPath)) out.push(mirrorPath);
+          const mirrored = addCacheBust(mirrorPath);
+          if (!out.includes(mirrored)) out.push(mirrored);
         } else {
           const rel = mirrorPath.startsWith("./")
             ? mirrorPath
             : `./${mirrorPath.replace(/^\/+/, "")}`;
-          if (!out.includes(rel)) out.push(rel);
+          const mirrored = addCacheBust(rel);
+          if (!out.includes(mirrored)) out.push(mirrored);
         }
       }
       if (!first) return out;
-      if (!out.includes(first)) out.push(first);
+      const firstWithBust = addCacheBust(first);
+      if (!out.includes(firstWithBust)) out.push(firstWithBust);
       const base = first.split("?")[0];
       const hasWebp = /\.webp$/i.test(base);
       const push = (value) => {
         if (!value) return;
-        if (!out.includes(value)) out.push(value);
+        const candidate = addCacheBust(value);
+        if (!out.includes(candidate)) out.push(candidate);
       };
       if (base.includes("/site/site_MiniWebP/")) {
         push(base.replace("/site/site_MiniWebP/", "/site_MiniWebP/"));
