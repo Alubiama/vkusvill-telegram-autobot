@@ -852,9 +852,15 @@
     const latestIsFresh = latestDayRaw === today;
     const payloadIsForcedStale = Boolean(payload.force_stale || payload.fs);
     const latestIsForcedStale = Boolean(latestPayload?.force_stale || latestPayload?.fs);
+    const latestPayloadHasUsefulData = hasUsefulPayloadData(latestPayload);
+    const latestPayloadCanOverride = latestIsFresh && latestPayloadHasUsefulData;
     let staleNotice = "";
 
-    if (latestIsForcedStale && latestIsFresh) {
+    // A fresh server snapshot must beat an old stale Telegram payload.
+    if (latestPayloadCanOverride && (payloadIsForcedStale || !hasUsefulPayloadData(payload) || !payloadIsFresh)) {
+      const preservedYour = payload.your || {};
+      payload = { ...latestPayload, your: preservedYour };
+    } else if (latestIsForcedStale && latestIsFresh) {
       payload = latestPayload || {};
       staleNotice = String((latestPayload?.round_status || latestPayload?.rs || {}).n || "Свежие скидки за сегодня еще не готовы. Вчерашний срез не показываем.");
     } else if (!hasUsefulPayloadData(payload)) {
