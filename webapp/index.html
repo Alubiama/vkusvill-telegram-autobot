@@ -1613,7 +1613,12 @@
         const empty = document.createElement("div");
         empty.className = "empty";
         if (staleNotice) {
-          empty.innerHTML = `${staleNotice}<br/>Обнови Mini App позже, когда появится свежий срез.`;
+          const t = document.createTextNode(staleNotice);
+          const br = document.createElement("br");
+          const t2 = document.createTextNode("Обнови Mini App позже, когда появится свежий срез.");
+          empty.appendChild(t);
+          empty.appendChild(br);
+          empty.appendChild(t2);
         } else if (!hasDataParam) {
           empty.innerHTML = "Сегодняшние товары еще не подтянулись.<br/>Открой /app еще раз чуть позже.";
         } else {
