@@ -602,6 +602,7 @@
         <div class="group-tools" id="groupTools">
           <button class="tool-btn" id="selectTabBtn" type="button">Выбрать всё</button>
           <button class="tool-btn" id="clearTabBtn" type="button">Сброс</button>
+          <button class="tool-btn" id="refreshStockBtn" type="button" style="display:none">🔄 Остатки</button>
         </div>
       </div>
       <div id="items" class="items"></div>
@@ -1602,6 +1603,7 @@
       const toolsEl = document.getElementById("groupTools");
       const selectBtn = document.getElementById("selectTabBtn");
       const clearBtn = document.getElementById("clearTabBtn");
+      const refreshBtn = document.getElementById("refreshStockBtn");
       itemsEl.innerHTML = "";
 
       const tab = getActiveTab();
@@ -1659,6 +1661,9 @@
         clearBtn.textContent = tab && tab.type === "ready_food" && tab.items.length > visibleItems.length
           ? "Сброс страницы"
           : "Сброс";
+      }
+      if (refreshBtn) {
+        refreshBtn.style.display = tab && tab.type === "ready_food" ? "" : "none";
       }
 
       if (!visibleItems.length) {
@@ -1771,6 +1776,19 @@
     bindTapAction(document.getElementById("clearAllBtn"), clearAllSelection);
     document.getElementById("selectTabBtn").addEventListener("click", () => setTabSelection("all"));
     document.getElementById("clearTabBtn").addEventListener("click", () => setTabSelection("none"));
+    document.getElementById("refreshStockBtn").addEventListener("click", () => {
+      const btn = document.getElementById("refreshStockBtn");
+      if (!tg || typeof tg.sendData !== "function") {
+        btn.textContent = "Недоступно";
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Обновляю...";
+      tg.sendData(JSON.stringify({ type: "refresh_stock", day }));
+      setTimeout(() => {
+        setSendState("Запрос отправлен. Бот обновит остатки и пришлёт ответ в чат. Открой /app заново.", "ok");
+      }, 300);
+    });
 
     updateSummary();
     updateOverview();
