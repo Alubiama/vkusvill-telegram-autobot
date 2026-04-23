@@ -1517,7 +1517,8 @@
       const groupQty = Number(item.group_qty || 0);
       const soldOut = availabilityStatus === "sold_out" || (stockQty !== null && stockQty <= 0);
       const tomorrowOnly = availabilityStatus === "tomorrow_only";
-      if (stockQty !== null || groupQty > 0 || soldOut || tomorrowOnly || (!soldOut && !tomorrowOnly)) {
+      const showStockRow = stockQty !== null || groupQty > 0 || soldOut || tomorrowOnly;
+      if (showStockRow) {
         const stockRow = document.createElement("div");
         stockRow.className = "stock-row";
         if (tomorrowOnly) {
@@ -1533,11 +1534,6 @@
           if (soldOut && !stockQty) {
             stock.textContent = "Нет";
           }
-          stockRow.appendChild(stock);
-        } else {
-          const stock = document.createElement("span");
-          stock.className = "stock-badge unknown";
-          stock.textContent = "Остаток уточняется";
           stockRow.appendChild(stock);
         }
         if (groupQty > 0) {
