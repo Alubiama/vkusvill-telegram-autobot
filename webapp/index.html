@@ -828,18 +828,24 @@
     }
 
     function loadLatestPayloadSync() {
-      try {
-        const xhr = new XMLHttpRequest();
-        const stamp = Date.now();
-        xhr.open("GET", `./latest.json?v=${stamp}`, false);
-        xhr.setRequestHeader("Cache-Control", "no-cache");
-        xhr.send(null);
-        if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
-          const data = JSON.parse(xhr.responseText);
-          if (hasUsefulPayloadData(data)) return data;
+      const groupId = String(params.get("group") || "").trim();
+      const candidates = [];
+      if (groupId) candidates.push(`./groups/${encodeURIComponent(groupId)}/latest.json`);
+      candidates.push(`./latest.json`);
+      const stamp = Date.now();
+      for (const url of candidates) {
+        try {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", `${url}?v=${stamp}`, false);
+          xhr.setRequestHeader("Cache-Control", "no-cache");
+          xhr.send(null);
+          if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
+            const data = JSON.parse(xhr.responseText);
+            if (hasUsefulPayloadData(data)) return data;
+          }
+        } catch (_err) {
+          // try next candidate
         }
-      } catch (_err) {
-        return null;
       }
       return null;
     }
