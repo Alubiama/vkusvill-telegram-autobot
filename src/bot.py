@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import hashlib
+import html as _html
 import json
 import logging
 import os
@@ -12,7 +13,7 @@ import sys
 import shutil
 import tempfile
 import zlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 from urllib.request import urlopen
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -30,6 +31,7 @@ from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    ConversationHandler,
     Defaults,
     ContextTypes,
     MessageHandler,
@@ -39,7 +41,7 @@ from telegram.request import HTTPXRequest
 
 from .config import Settings
 from .command_utils import command_to_args, project_root
-from .providers import BaseProvider, ManualJsonProvider, RPACommandProvider
+from .providers import BaseProvider, ManualJsonProvider, RPACommandProvider, HttpApiProvider
 from .runtime_guard import current_project_root, describe_runtime_root
 from .store import ItemRow, OrderCycle, StateStore
 from .vkusvill_gateway import STATUS_SOLD_OUT, STATUS_TOMORROW, VkusvillGateway
@@ -61,6 +63,66 @@ class VkusvillGroupBot:
 
     def _collection_schedule_text(self) -> str:
         return ", ".join(t.strftime("%H:%M") for t in self.settings.collection_times)
+
+    def _order_window_open_time(self) -> dtime:
+        raw = (self.store.get_meta("order_window_open_time") or "").strip()
+        if raw:
+            try:
+                return datetime.strptime(raw, "%H:%M").time()
+            except ValueError:
+                LOGGER.warning("Invalid order_window_open_time override ignored: %s", raw)
+        return self.settings.order_window_open_time
+
+    def _order_window_close_time(self) -> dtime:
+        raw = (self.store.get_meta("order_window_close_time") or "").strip()
+        if raw:
+            try:
+                return datetime.strptime(raw, "%H:%M").time()
+            except ValueError:
+                LOGGER.warning("Invalid order_window_close_time override ignored: %s", raw)
+        return self.settings.order_window_close_time
+
+    def _order_window_open_message(self) -> str:
+        raw = (self.store.get_meta("order_window_open_message") or "").strip()
+        return raw or self.settings.order_window_open_message
+
+    def _order_window_close_message(self) -> str:
+        raw = (self.store.get_meta("order_window_close_message") or "").strip()
+        return raw or self.settings.order_window_close_message
+
+    def _order_window_schedule_summary(self) -> str:
+        return (
+            "Текущее окно заказов:\n"
+            f"- open: {self._order_window_open_time().strftime('%H:%M')}\n"
+            f"- close: {self._order_window_close_time().strftime('%H:%M')}\n"
+            f"- openmsg: {self._order_window_open_message()}\n"
+            f"- closemsg: {self._order_window_close_message()}"
+        )
+
+    def _clear_order_window_overrides(self) -> None:
+        self.store.set_meta("order_window_open_time", "")
+        self.store.set_meta("order_window_close_time", "")
+        self.store.set_meta("order_window_open_message", "")
+        self.store.set_meta("order_window_close_message", "")
+
+    def _reschedule_order_window_jobs(self, app: Application) -> None:
+        for job in list(app.job_queue.jobs()):
+            name = job.name or ""
+            if name.startswith("order-window-open-") or name.startswith("order-window-closed-"):
+                job.schedule_removal()
+
+        open_time = self._order_window_open_time()
+        close_time = self._order_window_close_time()
+        app.job_queue.run_daily(
+            self.scheduled_order_window_open,
+            time=open_time,
+            name=f"order-window-open-{open_time.strftime('%H:%M')}",
+        )
+        app.job_queue.run_daily(
+            self.scheduled_order_window_closed,
+            time=close_time,
+            name=f"order-window-closed-{close_time.strftime('%H:%M')}",
+        )
 
     def _discounts_snapshot_day(self) -> str:
         path = Path(self.settings.discounts_json_path)
@@ -133,7 +195,93 @@ class VkusvillGroupBot:
         raw = "|".join(sorted(str(x.item_id) for x in items))
         return hashlib.sha1(f"{day}|{raw}".encode("utf-8")).hexdigest()[:12]
 
+    def _wave_history_path(self) -> Path:
+        path = Path(self.settings.discounts_json_path)
+        return path.with_name(f"{path.stem}.waves.json")
+
+    @staticmethod
+    def _item_row_from_payload(payload: object) -> ItemRow:
+        if isinstance(payload, ItemRow):
+            return payload
+        if not isinstance(payload, dict):
+            return ItemRow("", "", 0.0, 0.0, "", "", None, "unknown", "")
+        return ItemRow(
+            item_id=str(payload.get("item_id") or ""),
+            name=str(payload.get("name") or ""),
+            price=float(payload.get("price") or 0),
+            discount_price=float(payload.get("discount_price") or payload.get("price") or 0),
+            source=str(payload.get("source") or ""),
+            image_url=str(payload.get("image_url") or ""),
+            stock_qty=(int(payload.get("stock_qty")) if payload.get("stock_qty") not in (None, "") else None),
+            availability_status=str(payload.get("availability_status") or "unknown"),
+            availability_reason=str(payload.get("availability_reason") or ""),
+        )
+
+    @staticmethod
+    def _wave_snapshot_id(day: str, wave_no: int, items: list[object], fingerprint: str = "") -> str:
+        raw = "|".join(sorted(str(x.item_id) for x in items))
+        seed = f"{day}|wave={wave_no}|{fingerprint}|{raw}"
+        return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:12]
+
+    def _load_wave_history(self, day: str) -> list[dict[str, object]]:
+        path = self._wave_history_path()
+        if not path.exists():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if str(payload.get("day") or "") != day:
+            return []
+        waves = payload.get("waves") or []
+        if not isinstance(waves, list):
+            return []
+        return [row for row in waves if isinstance(row, dict)]
+
+    def _archive_wave_history(self, day: str) -> list[str]:
+        archived: list[str] = []
+        waves = self._load_wave_history(day)
+        if not waves:
+            self.store.set_meta("last_wave_snapshot_count", "0")
+            self.store.set_meta("last_wave_snapshot_id", "")
+            self.store.set_meta("last_wave_snapshot_day", day)
+            self.store.set_meta("last_wave_snapshot_status", "")
+            self.store.set_meta("last_wave_snapshot_wave", "")
+            self.store.set_meta("last_wave_snapshot_saved_new", "false")
+            return archived
+        for row in waves:
+            items = [self._item_row_from_payload(x) for x in (row.get("items") or []) if isinstance(x, dict)]
+            if not items:
+                continue
+            wave_no = int(row.get("wave") or 0)
+            fingerprint = str(row.get("fingerprint") or "")
+            snapshot_id = self._wave_snapshot_id(day, wave_no, items, fingerprint)
+            status = f"wave_{wave_no}"
+            if fingerprint:
+                status = f"{status}:{fingerprint[:12]}"
+            saved = self.store.save_day_snapshot(
+                day=day,
+                snapshot_id=snapshot_id,
+                items=[self._item_to_row(item) for item in items],
+                regular_count=self._regular_inshop_count(items),
+                status=status,
+                created_at=self._now_iso(),
+            )
+            self.store.set_meta("last_wave_snapshot_id", snapshot_id)
+            self.store.set_meta("last_wave_snapshot_day", day)
+            self.store.set_meta("last_wave_snapshot_status", status)
+            self.store.set_meta("last_wave_snapshot_wave", str(wave_no))
+            self.store.set_meta("last_wave_snapshot_total_items", str(len(items)))
+            self.store.set_meta("last_wave_snapshot_saved_new", "true" if saved else "false")
+            archived.append(snapshot_id)
+        if archived:
+            self.store.set_meta("last_wave_snapshot_count", str(len(archived)))
+        return archived
+
     def _ready_food_source_enabled(self) -> bool:
+        # http_api provider always fetches ready food from /offers/gotovaya-eda/
+        if self.settings.provider == "http_api":
+            return True
         joined = " ".join(
             x
             for x in [
@@ -245,17 +393,7 @@ class VkusvillGroupBot:
         existing_items = self._filter_excluded_items(day, existing_items)
         fetched_items = self._filter_excluded_items(day, fetched_items)
         if mode == "regular":
-            merged_regular = self._preserve_missing_as_unavailable(
-                self._non_ready_food_items(existing_items),
-                self._non_ready_food_items(fetched_items),
-            )
-            return (
-                self._merge_unique_items(
-                    merged_regular,
-                    self._only_ready_food_items(existing_items),
-                ),
-                "regular_only",
-            )
+            return (self._non_ready_food_items(fetched_items), "regular_only")
         if mode == "ready":
             fresh_ready = self._only_ready_food_items(fetched_items)
             if not fresh_ready:
@@ -341,10 +479,7 @@ class VkusvillGroupBot:
             warnings.append(f"latest.json содержит {len(stale_in_latest)} stale item_id")
         if stock_mismatches:
             warnings.append(f"рассинхрон остатков: {len(stock_mismatches)} поз.")
-        if regular and regular_with_stock < len(regular):
-            warnings.append(f"остатки у обычных скидок заполнены не везде ({regular_with_stock}/{len(regular)})")
-        if ready_food and ready_with_stock < len(ready_food):
-            warnings.append(f"остатки у готовой еды заполнены не везде ({ready_with_stock}/{len(ready_food)})")
+        # stock_qty often null from VkusVill inshop modal — not a real error, skip warning
         if latest_group_sizes[:3] != [6, 6, 6]:
             warnings.append(f"группы в latest.json выглядят странно: {latest_group_sizes}")
         if image_health["placeholder_ids"]:
@@ -496,6 +631,9 @@ class VkusvillGroupBot:
         self.store.set_meta("last_publish_status", "ok" if ok else "error")
         self.store.set_meta("last_publish_detail", detail)
 
+    def _autonomy_repair_fingerprint(self, day: str, state: str, actions: list[str], note: str) -> str:
+        return f"{day}|{state}|{','.join(actions)}|{note}"
+
     async def _attempt_autonomy_repair(self, app: Application, source: str) -> tuple[bool, str]:
         day = self._today()
         payload = self._update_autonomy_meta(day)
@@ -519,11 +657,12 @@ class VkusvillGroupBot:
         if needs_latest_rewrite:
             items_for_app = restored_items if restored_items else self.store.list_items(day)
             if items_for_app:
-                self._write_webapp_latest_snapshot(day, items_for_app)
+                self._write_webapp_snapshot_for_current_collect(day, items_for_app)
                 actions.append("rewrite_latest")
                 report = self._assess_day_integrity(day)
 
-        public_stale = (self.store.get_meta("last_publish_public_check_status") or "") == "error"
+        last_publish_status = (self.store.get_meta("last_publish_public_check_status") or "").strip()
+        public_stale = last_publish_status == "error" or last_publish_status == ""
         should_publish = bool(
             self.settings.auto_publish_pages
             and (needs_latest_rewrite or public_stale or state == "degraded")
@@ -535,7 +674,7 @@ class VkusvillGroupBot:
 
         session_status = (self.store.get_meta("last_sessioncheck_status") or "").strip().lower()
         if session_status == "error":
-            ok, detail = await self._run_session_probe()
+            ok, detail = await self._run_session_probe_mobile_first(app)
             self.store.set_meta("last_sessioncheck_at", self._now_iso())
             self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
             self.store.set_meta("last_sessioncheck_detail", detail)
@@ -544,14 +683,18 @@ class VkusvillGroupBot:
         updated = self._update_autonomy_meta(day)
         note = updated["note"] or "ok"
         if actions:
-            self.store.set_meta("autonomy_last_repair_result", ",".join(actions))
-            await self._send_owner(
-                app,
-                (
-                    f"Автовосстановление ({source}): {', '.join(actions)}.\n"
-                    f"Итог: {updated['title']}. Причина: {note}"
-                )[:3900],
-            )
+            result = ",".join(actions)
+            repair_fp = self._autonomy_repair_fingerprint(day, state, actions, note)
+            self.store.set_meta("autonomy_last_repair_result", result)
+            if (self.store.get_meta("autonomy_last_repair_alert_fp") or "") != repair_fp:
+                self.store.set_meta("autonomy_last_repair_alert_fp", repair_fp)
+                await self._send_owner(
+                    app,
+                    (
+                        f"Автовосстановление ({source}): {', '.join(actions)}.\n"
+                        f"Итог: {updated['title']}. Причина: {note}"
+                    )[:3900],
+                )
             return True, ",".join(actions)
         return False, "no_actions"
 
@@ -571,6 +714,7 @@ class VkusvillGroupBot:
         state = payload["state"]
         if state == "healthy":
             self.store.set_meta("autonomy_last_alert_fp", "")
+            self.store.set_meta("autonomy_last_repair_alert_fp", "")
             return
         fingerprint = f"{day}|{state}|{payload['note']}"
         if (self.store.get_meta("autonomy_last_alert_fp") or "") == fingerprint:
@@ -759,6 +903,66 @@ class VkusvillGroupBot:
         self.store.set_meta(meta_key, fingerprint)
         await self._send_owner(app, text)
 
+    async def _send_group_once(self, app: Application, key: str, fingerprint: str, text: str) -> bool:
+        meta_key = f"group_once:{key}"
+        if (self.store.get_meta(meta_key) or "") == fingerprint:
+            return False
+        self.store.set_meta(meta_key, fingerprint)
+        await self._send(app, text)
+        return True
+
+    async def _announce_startup_alive(self, app: Application) -> bool:
+        day = self._today()
+        fingerprint = f"{day}|pid={os.getpid()}"
+        return await self._send_group_once(
+            app,
+            "startup_alive",
+            fingerprint,
+            "Бот ожил после ребута и снова на связи.",
+        )
+
+    async def _announce_order_window_open(self, app: Application) -> bool:
+        day = self._today()
+        open_time = self._order_window_open_time()
+        fingerprint = f"{day}|open={open_time.strftime('%H:%M')}"
+        return await self._send_group_once(
+            app,
+            "order_window_open",
+            fingerprint,
+            self._order_window_open_message(),
+        )
+
+    async def _announce_order_window_closed(self, app: Application) -> bool:
+        day = self._today()
+        close_time = self._order_window_close_time()
+        fingerprint = f"{day}|close={close_time.strftime('%H:%M')}"
+        return await self._send_group_once(
+            app,
+            "order_window_closed",
+            fingerprint,
+            self._order_window_close_message(),
+        )
+
+    async def _announce_payment_closed(self, app: Application, batch_id: int) -> bool:
+        day = self._today()
+        fingerprint = f"{day}|batch={batch_id}|paid_closed"
+        return await self._send_group_once(
+            app,
+            f"payment_closed:{batch_id}",
+            fingerprint,
+            f"{self._batch_label(batch_id)} собран и оплачен. Заказ оплачен и закрыт.",
+        )
+
+    async def _announce_delivery(self, app: Application, batch_id: int) -> bool:
+        day = self._today()
+        fingerprint = f"{day}|batch={batch_id}|delivered"
+        return await self._send_group_once(
+            app,
+            f"delivery:{batch_id}",
+            fingerprint,
+            f"{self._batch_label(batch_id)} доставлен.",
+        )
+
     async def _run_startup_sanity_check(self, app: Application) -> dict[str, object]:
         day = self._today()
         runtime_root = self._runtime_root_payload()
@@ -826,6 +1030,8 @@ class VkusvillGroupBot:
             lines.extend([f"- critical: {msg}" for msg in issues[:4]])
             lines.extend([f"- warning: {msg}" for msg in warnings[:4]])
             await self._alert_owner_once(app, "startup_sanity", "\n".join(lines)[:3900])
+        elif await self._announce_startup_alive(app):
+            LOGGER.info("Startup alive notice sent for %s", day)
 
         return {
             "status": status,
@@ -837,6 +1043,12 @@ class VkusvillGroupBot:
 
     async def scheduled_startup_sanity(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._run_startup_sanity_check(context.application)
+
+    async def scheduled_order_window_open(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._announce_order_window_open(context.application)
+
+    async def scheduled_order_window_closed(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._announce_order_window_closed(context.application)
 
     async def _send(self, app: Application, text: str, **kwargs) -> None:
         chat_id = self._get_chat_id()
@@ -1011,15 +1223,15 @@ class VkusvillGroupBot:
 
     @staticmethod
     def _batch_label(batch_id: int | None) -> str:
-        return f"batch #{int(batch_id)}" if batch_id is not None else "batch ?"
+        return f"заказ #{int(batch_id)}" if batch_id is not None else "заказ ?"
 
     @staticmethod
     def _cycle_state_human(status: str) -> str:
         mapping = {
             "open": "открыт",
-            "finalizing": "собирается",
-            "partially_added": "частично добавлен",
-            "added_waiting_payment": "ждет оплаты",
+            "finalizing": "почти собран",
+            "partially_added": "частично собран",
+            "added_waiting_payment": "собран",
             "closed": "закрыт",
             "cancelled": "отменен",
         }
@@ -1140,7 +1352,7 @@ class VkusvillGroupBot:
 
     def _format_who_chose_text(self, day: str, cycle: OrderCycle | None) -> str:
         if cycle is None:
-            return f"За {day} сейчас нет активного batch."
+            return f"За {day} сейчас нет активного заказа."
         votes = [row for row in self.store.votes_by_user(day, batch_id=cycle.batch_id) if int(row.get("qty") or 0) > 0]
         if not votes:
             return f"{self._batch_label(cycle.batch_id)} пока пуст."
@@ -1180,7 +1392,7 @@ class VkusvillGroupBot:
         lines = [f"Кто что выбрал в {self._batch_label(cycle.batch_id)}:"]
         for entry in ordered[:20]:
             rows = list(entry["rows"])
-            lines.append(f"{entry['name']}: {len(rows)} поз. · {self._format_money(float(entry['sum']))}")
+            lines.append(f"<b>{_html.escape(str(entry['name']))}</b>: {len(rows)} поз. · {self._format_money(float(entry['sum']))}")
             lines.append(self._format_selection_preview(rows, limit=4))
         extra_users = max(0, len(ordered) - 20)
         if extra_users > 0:
@@ -1224,17 +1436,11 @@ class VkusvillGroupBot:
                 "b": autonomy["badge"],
                 "n": autonomy["note"],
             }
-        if autonomy["state"] == "warning":
-            return {
-                "k": "waiting",
-                "t": autonomy["title"],
-                "s": autonomy["subtitle"],
-                "b": autonomy["badge"],
-                "n": autonomy["note"],
-            }
+        # warnings (non-critical) do not block ordering — fall through to cycle check
         open_cycle = self._current_open_cycle(day)
         waiting_cycle = self._waiting_payment_cycle(day)
         partial_cycle = self._partial_cycle(day)
+        finalizing_cycle = self.store.get_latest_cycle(day, ("finalizing",))
 
         if partial_cycle is not None:
             missing = len(self.store.get_missing_cycle_items(day, partial_cycle.batch_id))
@@ -1249,34 +1455,42 @@ class VkusvillGroupBot:
             }
 
         if waiting_cycle is not None:
-            subtitle = "Ждет оплаты владельцем."
-            badge = "Ждет оплаты"
+            subtitle = "Товары уже в корзине. Ждём оплаты владельцем."
+            badge = "Собран"
             if open_cycle is not None and open_cycle.batch_id != waiting_cycle.batch_id:
                 subtitle = "Новые выборы уже идут в следующий раунд."
                 badge = "Два раунда"
             return {
                 "k": "waiting",
-                "t": "Заказ в корзине",
+                "t": "Заказ собран",
                 "s": subtitle,
                 "b": badge,
             }
 
+        if finalizing_cycle is not None:
+            return {
+                "k": "finalizing",
+                "t": "Сейчас только просмотр",
+                "s": "Идёт финальная сверка. Новые изменения временно не сохраняем.",
+                "b": "Просмотр",
+            }
+
         if open_cycle is not None:
-            subtitle = "Можно выбирать товары."
+            subtitle = "Можно выбирать товары и менять выбор, пока раунд открыт."
             if open_cycle.selected_users > 0 or open_cycle.selected_positions > 0:
                 subtitle = f"{open_cycle.selected_users} чел. · {open_cycle.selected_positions} поз."
             return {
                 "k": "open",
-                "t": "Сбор открыт",
+                "t": "Можно редактировать",
                 "s": subtitle,
-                "b": "Идет сбор",
+                "b": "Открыто",
             }
 
         return {
             "k": "idle",
-            "t": "Новый раунд готов",
-            "s": "Можно выбирать товары.",
-            "b": "Готово",
+            "t": "Можно редактировать",
+            "s": "Новый раунд готов. Можно выбирать товары.",
+            "b": "Открыто",
         }
 
     def _current_open_cycle(self, day: str) -> OrderCycle | None:
@@ -1288,17 +1502,18 @@ class VkusvillGroupBot:
     def _partial_cycle(self, day: str) -> OrderCycle | None:
         return self.store.get_latest_cycle(day, ("partially_added",))
 
-    def _close_waiting_cycle(self, day: str) -> str:
+    async def _close_waiting_cycle(self, app: Application, day: str) -> str:
         cycle = self._waiting_payment_cycle(day)
         if cycle is None:
-            return "Нет цикла со статусом «ждет оплаты»."
+            return "Нет заказа со статусом «ждет оплаты»."
         charges = self.store.ensure_cycle_charges(day, cycle.batch_id, note=f"batch {cycle.batch_id} closed")
         self.store.update_cycle_status(day, cycle.batch_id, "closed", closed_at=self._now_iso(), paid_at=self._now_iso())
-        lines = [f"{self._batch_label(cycle.batch_id)} закрыт. Следующие выборы пойдут в новый open batch."]
+        lines = [f"{self._batch_label(cycle.batch_id)} закрыт. Следующие выборы пойдут в новый раунд."]
         if charges:
             lines.append("Начислил суммы по людям:")
             for row in charges[:12]:
                 lines.append(f"- {row.user_name}: {self._format_money(float(row.amount))}")
+        await self._announce_payment_closed(app, cycle.batch_id)
         return "\n".join(lines)
 
     def _current_cancellable_cycle(self, day: str) -> OrderCycle | None:
@@ -1307,15 +1522,38 @@ class VkusvillGroupBot:
     def _current_collectable_cycle(self, day: str) -> OrderCycle | None:
         return self._current_open_cycle(day) or self._partial_cycle(day)
 
+    def _webapp_selection_cycle(self, day: str) -> tuple[OrderCycle | None, str | None]:
+        open_cycle = self._current_open_cycle(day)
+        if open_cycle is not None:
+            return open_cycle, None
+
+        locked_statuses = {"finalizing", "partially_added", "added_waiting_payment", "closed"}
+        locked_cycle = next(
+            (cycle for cycle in self.store.list_cycles(day) if cycle.status in locked_statuses),
+            None,
+        )
+        if locked_cycle is None:
+            return None, None
+
+        state = self._cycle_state_human(locked_cycle.status)
+        return (
+            None,
+            (
+                f"{self._batch_label(locked_cycle.batch_id)} сейчас {state}. "
+                "Из Mini App изменения в этот заказ больше не сохраняются. "
+                "Дождись нового раунда и открой /app заново."
+            ),
+        )
+
     def _cancel_open_cycle(self, day: str) -> str:
         cycle = self._current_cancellable_cycle(day)
         if cycle is None:
-            return "Сейчас нет активного batch для отмены."
+            return "Сейчас нет активного заказа для отмены."
         self.store.update_cycle_status(day, cycle.batch_id, "cancelled", closed_at=self._now_iso())
         if cycle.status == "open":
             return (
                 f"{self._batch_label(cycle.batch_id)} отменен. "
-                "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый open batch."
+                "Он больше не будет участвовать в сборе. Следующие выборы пойдут в новый раунд."
             )
         if cycle.status == "partially_added":
             return (
@@ -1432,29 +1670,130 @@ class VkusvillGroupBot:
         self.store.set_meta("startup_recovery_at", self._now_iso())
         return note
 
+    def _build_finalize_receipt(
+        self,
+        payload: dict,
+        exec_result: dict,
+        batch_id: int,
+        all_ok: bool,
+    ) -> str:
+        """Build a per-user receipt for group chat after finalize."""
+        # Map item_id -> executor check result
+        checks_by_id: dict[str, dict] = {}
+        for chk in exec_result.get("checks") or []:
+            if chk and chk.get("item_id"):
+                checks_by_id[str(chk["item_id"])] = chk
+
+        # Map item_id -> item info from payload
+        items_by_id: dict[str, dict] = {}
+        for row in payload.get("items") or []:
+            items_by_id[str(row["item_id"])] = row
+
+        reason_short = {
+            "sold_out": "нет в наличии",
+            "no_discount": "без скидки",
+            "price_mismatch": "цена изменилась",
+            "already_in_cart": "уже в корзине",
+            "requires_tomorrow_delivery": "только завтра",
+        }
+
+        # Group votes by user
+        users: dict[int, dict] = {}
+        for vote in payload.get("votes_by_user") or []:
+            uid = int(vote["user_id"])
+            if uid not in users:
+                users[uid] = {
+                    "name": str(vote["user_name"]),
+                    "items": [],
+                    "total": 0.0,
+                    "problems": [],
+                }
+            item_id = str(vote["item_id"])
+            qty = int(vote.get("qty") or 1)
+            item = items_by_id.get(item_id, {})
+            price = float(item.get("discount_price") or 0)
+            name = str(item.get("name") or vote.get("name") or item_id)
+            chk = checks_by_id.get(item_id, {})
+            ok = bool(chk.get("ok", True))
+            reason = str(chk.get("reason") or "")
+            actual_price = chk.get("actual_price")
+
+            if ok:
+                display_price = float(actual_price) if actual_price is not None else price
+                users[uid]["items"].append(f"  {name} — {self._format_money(display_price)}")
+                users[uid]["total"] += display_price * qty
+            else:
+                reason_h = reason_short.get(reason, reason.replace("_", " "))
+                users[uid]["problems"].append(f"  {name} — {reason_h}")
+
+        lines = []
+        status = "Заказ собран" if all_ok else "Заказ собран частично"
+        lines.append(f"{status} ({self._batch_label(batch_id)})")
+        lines.append("")
+
+        for uid, u in users.items():
+            lines.append(f"{u['name']}:")
+            for item_line in u["items"]:
+                lines.append(item_line)
+            if u["problems"]:
+                lines.append("  Не добавлено:")
+                for p in u["problems"]:
+                    lines.append(f"  {p}")
+            lines.append(f"  Итого: {self._format_money(u['total'])}")
+            lines.append("")
+
+        cart_unique = int(exec_result.get("cart_unique_after") or 0)
+        if cart_unique > 0:
+            cart_total_qty = int(exec_result.get("cart_total_qty_after") or 0)
+            lines.append(f"В корзине: {cart_unique} поз., {cart_total_qty} шт.")
+
+        total_sum = float(payload.get("total_sum_discount_price") or 0)
+        lines.append(f"Общая сумма: {self._format_money(total_sum)}")
+
+        if all_ok:
+            lines.append("Статус: ждёт оплаты")
+        else:
+            lines.append("Статус: нужно добрать недостающее")
+
+        return "\n".join(lines)
+
     @staticmethod
     def _finalize_outcome_human(code: str) -> str:
         mapping = {
-            "no_open_cycle": "нет открытого batch",
-            "no_partial_cycle": "нет частично добавленного batch",
-            "empty_open_batch": "в batch нет выбранных товаров",
+            "no_open_cycle": "нет открытого заказа",
+            "no_partial_cycle": "нет частично собранного заказа",
+            "empty_open_batch": "в заказе нет выбранных товаров",
             "missing_already_done": "все недостающие позиции уже добраны",
             "session_preflight_failed": "сессия ВкусВилл не подтверждена",
-            "added_waiting_payment": "добавлен в корзину и ждет оплаты",
-            "partially_added": "частично добавлен, нужно добрать недостающее",
+            "added_waiting_payment": "собран и ждет оплаты",
+            "partially_added": "частично собран, нужно добрать недостающее",
         }
         return mapping.get(code, code)
 
     async def _preflight_finalize_session(self, app: Application, mode: str) -> bool:
         if self.settings.dry_run or not self.settings.order_executor_command:
             return True
+        # Skip Chrome launch if session was verified OK recently (avoids abort on network blip)
+        last_status = (self.store.get_meta("last_sessioncheck_status") or "").strip().lower()
+        last_at_raw = self.store.get_meta("last_sessioncheck_at") or ""
+        if last_status == "ok" and last_at_raw:
+            try:
+                last_at = datetime.fromisoformat(last_at_raw)
+                if last_at.tzinfo is None:
+                    last_at = last_at.replace(tzinfo=self.settings.timezone)
+                age = datetime.now(self.settings.timezone) - last_at
+                if age.total_seconds() < 4 * 3600:
+                    LOGGER.info("preflight skipped: session ok %.0f min ago", age.total_seconds() / 60)
+                    return True
+            except ValueError:
+                pass
         ok, detail = await self._run_executor_session_preflight(app, allow_refresh=False)
         self.store.set_meta("last_sessioncheck_at", self._now_iso())
         self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
         self.store.set_meta("last_sessioncheck_detail", detail)
         if ok:
             return True
-        action = "добором недостающих" if mode == "missing" else "сборкой batch"
+        action = "добором недостающих" if mode == "missing" else "сборкой заказа"
         await self._send_owner(
             app,
             f"Остановил прогон перед {action}: сессия ВкусВилл не подтверждена ({detail}).",
@@ -1557,7 +1896,7 @@ class VkusvillGroupBot:
             return user_id, user_name, None
         if len(candidates) > 1:
             return None, None, "Нашлось несколько людей с таким именем. Лучше ответь на сообщение самого человека."
-        return None, None, f"В текущем batch не нашел пользователя «{target_name}»."
+        return None, None, f"В текущем заказе не нашел пользователя «{target_name}»."
 
     def _resolve_clearuser_target(
         self,
@@ -1594,7 +1933,7 @@ class VkusvillGroupBot:
                 for row in rows:
                     if int(row.get("user_id") or 0) == user_id:
                         return user_id, str(row.get("user_name") or f"user {user_id}"), None
-                return None, None, f"В текущем batch нет пользователя с id {user_id}."
+                return None, None, f"В текущем заказе нет пользователя с id {user_id}."
             return self._find_batch_user_by_name(day, raw, batch_id=batch_id)
 
         return None, None, "Ответь на сообщение человека или на бот-сводку командой /clearuser."
@@ -1631,17 +1970,10 @@ class VkusvillGroupBot:
         now = datetime.now(self.settings.timezone)
 
         if fingerprint != last_fp:
+            # New type of error — notify immediately and reset cooldown
             self.store.set_meta("last_collect_error_fp", fingerprint)
-        self.store.set_meta("last_collect_error_notified_at", self._now_iso())
-        return True
-
-    def _should_notify_low_item_count(self, day: str, unique_items: int) -> bool:
-        marker = f"{day}:{unique_items}"
-        last_marker = str(self.store.get_meta("last_collect_low_items_alert") or "")
-        if marker == last_marker:
-            return False
-        self.store.set_meta("last_collect_low_items_alert", marker)
-        return True
+            self.store.set_meta("last_collect_error_notified_at", self._now_iso())
+            return True
 
         try:
             last_at = datetime.fromisoformat(last_at_raw)
@@ -1656,6 +1988,22 @@ class VkusvillGroupBot:
             return True
         return False
 
+    def _should_notify_low_item_count(self, day: str, unique_items: int) -> bool:
+        marker = f"{day}:{unique_items}"
+        last_marker = str(self.store.get_meta("last_collect_low_items_alert") or "")
+        if marker == last_marker:
+            return False
+        self.store.set_meta("last_collect_low_items_alert", marker)
+        return True
+
+    def _should_notify_parser_anomaly(self, day: str, regular_count: int) -> bool:
+        marker = f"{day}:{regular_count}"
+        last_marker = str(self.store.get_meta("last_parser_anomaly_alert") or "")
+        if marker == last_marker:
+            return False
+        self.store.set_meta("last_parser_anomaly_alert", marker)
+        return True
+
     def _build_command_args(self, command_template: str, out_path: Path, extra: list[str] | None = None) -> list[str]:
         cmd = (command_template or "").replace("{order_file}", str(out_path))
         cmd = os.path.expandvars(cmd)
@@ -1663,6 +2011,44 @@ class VkusvillGroupBot:
         if extra:
             args.extend(extra)
         return args
+
+    def _write_reconciliation_report(self, day: str, batch_id: int, out_path: Path, exec_result: dict) -> Path | None:
+        report_path = Path(self.settings.out_dir) / f"reconciliation_{day}_b{batch_id}.json"
+        try:
+            order_payload = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            checks = exec_result.get("checks")
+            report = {
+                "day": day,
+                "batch_id": batch_id,
+                "generated_at": self._now_iso(),
+                "order_file": str(out_path),
+                "order": {
+                    "selected_positions": len(order_payload.get("items") or []),
+                    "total_sum_discount_price": float(order_payload.get("total_sum_discount_price") or 0),
+                    "items": order_payload.get("items") or [],
+                    "totals_by_user": order_payload.get("totals_by_user") or [],
+                    "skipped_items": order_payload.get("skipped_items") or [],
+                    "reduced_items": order_payload.get("reduced_items") or [],
+                },
+                "executor": {
+                    "ok": bool(exec_result.get("ok")),
+                    "status": str(exec_result.get("status") or ""),
+                    "ok_count": int(exec_result.get("ok_count") or 0),
+                    "total": int(exec_result.get("total") or 0),
+                    "breaker_triggered": bool(exec_result.get("breaker_triggered")),
+                    "breaker_threshold": int(exec_result.get("breaker_threshold") or 0),
+                    "cart_unique_before": int(exec_result.get("cart_unique_before") or 0),
+                    "cart_total_qty_before": int(exec_result.get("cart_total_qty_before") or 0),
+                    "cart_unique_after": int(exec_result.get("cart_unique_after") or 0),
+                    "cart_total_qty_after": int(exec_result.get("cart_total_qty_after") or 0),
+                },
+                "checks": checks if isinstance(checks, list) else [],
+            }
+            self._atomic_write_text(report_path, json.dumps(report, ensure_ascii=False, indent=2))
+            return report_path
+        except Exception as exc:
+            LOGGER.debug("Skipping reconciliation report write: %s", exc)
+            return None
 
     @staticmethod
     def _extract_payload(raw_text: str) -> dict | None:
@@ -1877,6 +2263,21 @@ class VkusvillGroupBot:
             return None, self._repair_mojibake(raw[:240])
         return None, f"returncode={proc.returncode}"
 
+    async def _run_session_probe_mobile_first(self, app: Application) -> tuple[bool, str]:
+        mobile_ok, mobile_detail = await self._check_mobile_vkusvill_session(app)
+        if mobile_ok is True:
+            return True, f"mobile session ok: {mobile_detail}"
+
+        chrome_ok, chrome_detail = await self._run_session_probe()
+        if chrome_ok:
+            if mobile_ok is False:
+                return True, f"mobile session failed ({mobile_detail}); chrome session ok"
+            return True, f"Chrome session ok; mobile probe unavailable ({mobile_detail})"
+
+        if mobile_ok is False:
+            return False, f"mobile session failed ({mobile_detail}); chrome session failed ({chrome_detail})"
+        return False, chrome_detail
+
     async def _refresh_image_mirror(self, day: str) -> tuple[bool, str]:
         script_path = Path("scripts") / "build_image_mirror.py"
         if not script_path.exists():
@@ -1990,6 +2391,116 @@ class VkusvillGroupBot:
     def _is_ready_food_offer(source: str) -> bool:
         src = (source or "").lower()
         return src.startswith("vkusvill_offers_ready_food")
+
+    def _refresh_ready_food_stock(self, day: str) -> int:
+        """Re-fetch stock_qty for today's ready_food items via HttpApiProvider._enrich_stock_qty."""
+        from src.providers import HttpApiProvider
+
+        if not isinstance(self.provider, HttpApiProvider):
+            raise ValueError("refresh_stock requires http_api provider")
+
+        items = self.store.list_items(day)
+        rf_items = [it for it in items if self._is_ready_food_offer(it.source)]
+        if not rf_items:
+            return 0
+
+        import httpx
+
+        cookies = self.provider._load_cookies()
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=self.provider.timeout_sec,
+            proxy=self.provider.proxy,
+        ) as client:
+            for c in cookies:
+                client.cookies.set(c["name"], c["value"], domain="vkusvill.ru")
+            r_food = client.get(self.provider.READY_FOOD_URL, headers=headers)
+            from src.providers import DiscountItem
+
+            disc_items = [
+                DiscountItem(
+                    item_id=it.item_id,
+                    name=it.name,
+                    price=it.price,
+                    discount_price=it.discount_price,
+                    source=it.source,
+                    image_url=it.image_url,
+                )
+                for it in rf_items
+            ]
+            self.provider._enrich_stock_qty(client, headers, disc_items, r_food.text)
+
+        updated = 0
+        for disc in disc_items:
+            if disc.stock_qty is not None:
+                for it in rf_items:
+                    if it.item_id == disc.item_id:
+                        it.stock_qty = disc.stock_qty
+                        it.availability_status = disc.availability_status or it.availability_status
+                        updated += 1
+                        break
+
+        if updated:
+            rows = [self._item_to_row(it) for it in items]
+            self.store.sync_items(day, rows)
+
+        return updated
+
+    def _refresh_stock_for_items(self, day: str, target_items: list[object]) -> int:
+        """Refresh stock for specific items only (used pre-finalize)."""
+        from src.providers import HttpApiProvider, DiscountItem
+
+        if not isinstance(self.provider, HttpApiProvider):
+            return 0
+
+        import httpx
+
+        cookies = self.provider._load_cookies()
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=self.provider.timeout_sec,
+            proxy=self.provider.proxy,
+        ) as client:
+            for c in cookies:
+                client.cookies.set(c["name"], c["value"], domain="vkusvill.ru")
+            r_food = client.get(self.provider.READY_FOOD_URL, headers=headers)
+
+            disc_items = [
+                DiscountItem(
+                    item_id=it.item_id,
+                    name=it.name,
+                    price=it.price,
+                    discount_price=it.discount_price,
+                    source=it.source,
+                    image_url=it.image_url,
+                )
+                for it in target_items
+            ]
+            self.provider._enrich_stock_qty(client, headers, disc_items, r_food.text)
+
+        updated = 0
+        all_items = self.store.list_items(day)
+        for disc in disc_items:
+            for it in all_items:
+                if it.item_id == disc.item_id:
+                    if disc.stock_qty is not None:
+                        it.stock_qty = disc.stock_qty
+                        updated += 1
+                    elif disc.availability_status == "sold_out":
+                        it.stock_qty = 0
+                        it.availability_status = "sold_out"
+                        updated += 1
+                    if disc.availability_status:
+                        it.availability_status = disc.availability_status
+                    break
+
+        if updated:
+            rows = [self._item_to_row(it) for it in all_items]
+            self.store.sync_items(day, rows)
+
+        return updated
 
     def _build_collect_sources(self) -> list[tuple[str, BaseProvider]]:
         sources: list[tuple[str, BaseProvider]] = [("primary", self.provider)]
@@ -2245,7 +2756,7 @@ class VkusvillGroupBot:
         group_indexes: list[list[int]] = []
         for g in groups:
             group_indexes.append([register(item) for item in g["items"]])
-        favorite_indexes = [register(item) for item in favorites[:1]]
+        favorite_indexes = [register(item) for item in favorites]
         ready_food_indexes = [register(item) for item in ready_food]
         group_totals = [
             [idx, totals_map.get(str(item.item_id), 0)]
@@ -2299,6 +2810,7 @@ class VkusvillGroupBot:
             "rc": regular_count,
             "cap": 18,
             "rs": round_status,
+            "round_status": round_status,
             "im": filtered_mirror_map,
             "generated_at": self._now_iso(),
         }
@@ -2317,6 +2829,7 @@ class VkusvillGroupBot:
             "rc": 0,
             "cap": 18,
             "rs": stale_payload.get("round_status") or {},
+            "round_status": stale_payload.get("round_status") or {},
             "im": {},
             "generated_at": self._now_iso(),
         }
@@ -2327,11 +2840,22 @@ class VkusvillGroupBot:
         payload = self._build_public_webapp_snapshot(day, items)
         self._atomic_write_text(out_path, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
-    def _write_webapp_stale_snapshot(self, day: str, note: str) -> None:
+    def _write_webapp_stale_snapshot(self, day: str, note: str, items: list[object] | None = None) -> None:
         out_path = Path("webapp") / "latest.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         payload = self._build_public_webapp_stale_snapshot(day, note)
         self._atomic_write_text(out_path, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+
+    def _write_webapp_snapshot_for_current_collect(self, day: str, items: list[object], note: str | None = None) -> None:
+        collect_verified, collect_note = self._collect_is_verified_for_app(day)
+        if not collect_verified:
+            self._write_webapp_stale_snapshot(
+                day,
+                note or collect_note or "Свежий срез за сегодня не подтвержден.",
+                items,
+            )
+            return
+        self._write_webapp_latest_snapshot(day, items)
 
     @staticmethod
     def _encode_webapp_payload(payload: dict) -> str:
@@ -2396,7 +2920,7 @@ class VkusvillGroupBot:
         group_indexes: list[list[int]] = []
         for g in groups:
             group_indexes.append([register(item) for item in g["items"]])
-        favorite_indexes = [register(item) for item in favorites[:1]]
+        favorite_indexes = [register(item) for item in favorites]
         ready_food_indexes = [register(item) for item in ready_food]
         group_totals = [
             [idx, totals_map.get(str(item.item_id), 0)]
@@ -2614,6 +3138,85 @@ class VkusvillGroupBot:
         self._set_owner_user_id(user_id)
         await update.message.reply_text(f"Владелец подтвержден: {user_id}")
 
+    async def schedule(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        args = [str(arg).strip() for arg in (context.args or []) if str(arg).strip()]
+        if not args or args[0].lower() in {"show", "status", "get"}:
+            await update.message.reply_text(self._order_window_schedule_summary())
+            return
+
+        action = args[0].lower()
+        app = context.application
+
+        def parse_time(raw: str) -> dtime | None:
+            try:
+                return datetime.strptime(raw.strip(), "%H:%M").time()
+            except ValueError:
+                return None
+
+        if action == "open":
+            if len(args) < 2:
+                await update.message.reply_text("Использование: /schedule open HH:MM")
+                return
+            parsed = parse_time(args[1])
+            if parsed is None:
+                await update.message.reply_text("Неверное время. Пример: /schedule open 08:45")
+                return
+            self.store.set_meta("order_window_open_time", parsed.strftime("%H:%M"))
+            self._reschedule_order_window_jobs(app)
+            await update.message.reply_text(self._order_window_schedule_summary())
+            return
+
+        if action == "close":
+            if len(args) < 2:
+                await update.message.reply_text("Использование: /schedule close HH:MM")
+                return
+            parsed = parse_time(args[1])
+            if parsed is None:
+                await update.message.reply_text("Неверное время. Пример: /schedule close 11:30")
+                return
+            self.store.set_meta("order_window_close_time", parsed.strftime("%H:%M"))
+            self._reschedule_order_window_jobs(app)
+            await update.message.reply_text(self._order_window_schedule_summary())
+            return
+
+        if action == "openmsg":
+            value = " ".join(args[1:]).strip()
+            if not value:
+                await update.message.reply_text("Использование: /schedule openmsg текст")
+                return
+            self.store.set_meta("order_window_open_message", value)
+            self._reschedule_order_window_jobs(app)
+            await update.message.reply_text(self._order_window_schedule_summary())
+            return
+
+        if action == "closemsg":
+            value = " ".join(args[1:]).strip()
+            if not value:
+                await update.message.reply_text("Использование: /schedule closemsg текст")
+                return
+            self.store.set_meta("order_window_close_message", value)
+            self._reschedule_order_window_jobs(app)
+            await update.message.reply_text(self._order_window_schedule_summary())
+            return
+
+        if action == "reset":
+            self._clear_order_window_overrides()
+            self._reschedule_order_window_jobs(app)
+            await update.message.reply_text(
+                "Настройки окна заказов сброшены к значениям из .env.\n"
+                + self._order_window_schedule_summary()
+            )
+            return
+
+        await update.message.reply_text(
+            "Использование: /schedule show | open HH:MM | close HH:MM | openmsg текст | closemsg текст | reset"
+        )
+
     async def collect(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_owner_or_reply(update):
             return
@@ -2739,7 +3342,7 @@ class VkusvillGroupBot:
         if not await self._check_owner_or_reply(update):
             return
 
-        ok, detail = await self._run_session_probe()
+        ok, detail = await self._run_session_probe_mobile_first(context.application)
         self.store.set_meta("last_sessioncheck_at", self._now_iso())
         self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
         self.store.set_meta("last_sessioncheck_detail", detail)
@@ -2781,6 +3384,331 @@ class VkusvillGroupBot:
             return
 
         await update.message.reply_text(result_text)
+
+    # -- /onboard conversation --
+    ONBOARD_PHONE, ONBOARD_OTP = range(2)
+
+    async def onboard_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if update.message is None:
+            return ConversationHandler.END
+        if not await self._check_owner_or_reply(update):
+            return ConversationHandler.END
+        if update.effective_chat and update.effective_chat.type != "private":
+            await update.message.reply_text("Онбординг работает только в личке. Напиши мне /onboard в ЛС.")
+            return ConversationHandler.END
+
+        await update.message.reply_text(
+            "Онбординг ВкусВилл аккаунта.\n"
+            "Введи номер телефона (10 цифр без +7, например 9001234567).\n"
+            "Отмена: /cancel"
+        )
+        return self.ONBOARD_PHONE
+
+    async def onboard_phone(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if update.message is None:
+            return ConversationHandler.END
+
+        raw = (update.message.text or "").strip()
+        # Clean up: remove +7, 8, spaces, dashes
+        phone = raw.replace("+7", "").replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        if phone.startswith("8") and len(phone) == 11:
+            phone = phone[1:]
+        if not phone.isdigit() or len(phone) != 10:
+            await update.message.reply_text(
+                f"Не похоже на номер: '{raw}'. Нужно 10 цифр (например 9001234567).\nПопробуй ещё раз или /cancel."
+            )
+            return self.ONBOARD_PHONE
+
+        context.user_data["onboard_phone"] = phone
+
+        try:
+            from src.mobile_api import load_mobile_config, _build_client
+            config = load_mobile_config()
+
+            def _send_otp(phone: str) -> dict:
+                client, should_close = _build_client(None, 20.0)
+                try:
+                    url = f"{config.base_url.rstrip('/')}/api/v1/user/otp/auth"
+                    headers = {
+                        "User-Agent": f"vkusvill/{config.app_version} (Android; {config.android_sdk})",
+                        "X-VKUSVILL-DEVICE": "android",
+                        "X-VKUSVILL-SOURCE": config.source,
+                        "X-VKUSVILL-VERSION": f"{config.app_version} ({config.version_code})",
+                        "X-VKUSVILL-MODEL": "Google Pixel 7",
+                        "X-VKUSVILL-TOKEN": config.anon_token,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    }
+                    resp = client.post(url, headers=headers, json={"phone": phone})
+                    try:
+                        payload = resp.json()
+                    except ValueError:
+                        payload = None
+                    return {"status_code": resp.status_code, "payload": payload}
+                finally:
+                    if should_close:
+                        client.close()
+
+            resp = await asyncio.to_thread(_send_otp, phone)
+            status_code = resp["status_code"]
+            payload = resp["payload"]
+
+            if status_code not in (200, 201, 204):
+                detail = ""
+                if isinstance(payload, dict):
+                    detail = str(payload.get("error") or payload.get("message") or payload.get("detail") or "")
+                await update.message.reply_text(
+                    f"ВкусВилл не принял запрос (HTTP {status_code}): {detail or 'нет деталей'}\n"
+                    "Проверь номер и попробуй /onboard заново."
+                )
+                return ConversationHandler.END
+
+            status_id = ""
+            if isinstance(payload, dict):
+                status_id = str(payload.get("statusId") or payload.get("status_id") or "")
+            context.user_data["onboard_status_id"] = status_id
+
+            await update.message.reply_text(
+                f"SMS с кодом отправлена на +7{phone}.\n"
+                "Введи код из SMS (4-6 цифр).\n"
+                "Отмена: /cancel"
+            )
+            return self.ONBOARD_OTP
+
+        except Exception as exc:
+            LOGGER.warning("onboard OTP request failed: %s", exc)
+            await update.message.reply_text(f"Ошибка при запросе OTP: {str(exc)[:200]}")
+            return ConversationHandler.END
+
+    async def onboard_otp(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if update.message is None:
+            return ConversationHandler.END
+
+        otp = (update.message.text or "").strip()
+        if not otp.isdigit() or not (4 <= len(otp) <= 6):
+            await update.message.reply_text("Код должен быть 4-6 цифр. Попробуй ещё раз или /cancel.")
+            return self.ONBOARD_OTP
+
+        phone = context.user_data.get("onboard_phone", "")
+
+        try:
+            from src.mobile_api import load_mobile_config, _build_client, _write_back_state
+            config = load_mobile_config()
+
+            def _confirm_otp(phone: str, otp: str) -> dict:
+                client, should_close = _build_client(None, 20.0)
+                try:
+                    url = f"{config.base_url.rstrip('/')}/api/v1/user/otp/confirm/auth"
+                    headers = {
+                        "User-Agent": f"vkusvill/{config.app_version} (Android; {config.android_sdk})",
+                        "X-VKUSVILL-DEVICE": "android",
+                        "X-VKUSVILL-SOURCE": config.source,
+                        "X-VKUSVILL-VERSION": f"{config.app_version} ({config.version_code})",
+                        "X-VKUSVILL-MODEL": "Google Pixel 7",
+                        "X-VKUSVILL-TOKEN": config.anon_token,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    }
+                    resp = client.post(url, headers=headers, json={
+                        "phone": phone,
+                        "otp": otp,
+                        "is_news": 0,
+                    })
+                    try:
+                        payload = resp.json()
+                    except ValueError:
+                        payload = None
+                    return {"status_code": resp.status_code, "payload": payload}
+                finally:
+                    if should_close:
+                        client.close()
+
+            resp = await asyncio.to_thread(_confirm_otp, phone, otp)
+            status_code = resp["status_code"]
+            payload = resp["payload"]
+
+            if status_code not in (200, 201, 204) or not isinstance(payload, dict):
+                detail = ""
+                if isinstance(payload, dict):
+                    detail = str(payload.get("error") or payload.get("message") or "")
+                await update.message.reply_text(
+                    f"Код не подошёл (HTTP {status_code}): {detail or 'нет деталей'}\n"
+                    "Попробуй /onboard заново для нового кода."
+                )
+                return ConversationHandler.END
+
+            from src.mobile_api import _extract_tokens
+            tokens = _extract_tokens(payload)
+            access_token = tokens.get("access_token", "")
+            refresh_token = tokens.get("refresh_token", "")
+            card_number = tokens.get("card_number", "")
+            # Extract name from data dict
+            data = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
+            user_name = str(data.get("name") or payload.get("name") or "")
+
+            tokens_info = []
+            if access_token:
+                tokens_info.append("access_token ✓")
+            if refresh_token:
+                tokens_info.append("refresh_token ✓")
+
+            # Save per-phone account (don't overwrite main account)
+            accounts_dir = Path("data/mobile_accounts")
+            accounts_dir.mkdir(parents=True, exist_ok=True)
+            account_path = accounts_dir / f"{phone}.json"
+            account_data = {
+                "phone": phone,
+                "card_number": card_number,
+                "name": user_name,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "anon_token": config.anon_token,
+                "base_url": config.base_url,
+                "onboarded_by": update.effective_user.id,
+                "onboarded_at": self._now_iso(),
+            }
+            account_path.write_text(
+                json.dumps(account_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            await update.message.reply_text(
+                f"Онбординг успешен!\n"
+                f"Телефон: +7{phone}\n"
+                f"Карта: {card_number or '?'}\n"
+                f"Имя: {user_name or '?'}\n"
+                f"Токены: {', '.join(tokens_info) or 'нет токенов'}\n"
+                f"Сохранён в: {account_path}\n"
+                f"(основной аккаунт не затронут)"
+            )
+
+        except Exception as exc:
+            LOGGER.warning("onboard OTP confirm failed: %s", exc)
+            await update.message.reply_text(f"Ошибка подтверждения: {str(exc)[:200]}")
+
+        context.user_data.pop("onboard_phone", None)
+        context.user_data.pop("onboard_card_number", None)
+        return ConversationHandler.END
+
+    async def accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        accounts_dir = Path("data/mobile_accounts")
+        if not accounts_dir.exists():
+            await update.message.reply_text("Нет подключённых аккаунтов. Используй /onboard.")
+            return
+
+        files = sorted(accounts_dir.glob("*.json"))
+        if not files:
+            await update.message.reply_text("Нет подключённых аккаунтов. Используй /onboard.")
+            return
+
+        active_phone = ""
+        try:
+            main_path = Path("data/mobile_tokens.json")
+            if main_path.exists():
+                active_phone = str(json.loads(main_path.read_text(encoding="utf-8")).get("phone") or "")
+        except Exception:
+            pass
+
+        lines = [f"Подключённые аккаунты ({len(files)}):"]
+        for f in files:
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                phone = data.get("phone", f.stem)
+                name = data.get("name", "?")
+                card = data.get("card_number", "?")
+                has_access = "✓" if data.get("access_token") else "✗"
+                has_refresh = "✓" if data.get("refresh_token") else "✗"
+                onboarded = data.get("onboarded_at", "?")[:10]
+                marker = "● " if phone == active_phone else "  "
+                lines.append(f"{marker}+7{phone} ({name}) карта:{card} access:{has_access} refresh:{has_refresh} [{onboarded}]")
+            except Exception:
+                lines.append(f"  {f.name} (ошибка чтения)")
+        lines.append("")
+        lines.append("● — активный. Переключить: /useaccount <phone>")
+
+        await update.message.reply_text("\n".join(lines))
+
+    async def useaccount(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+
+        args = context.args or []
+        if not args:
+            await update.message.reply_text(
+                "Использование: /useaccount <phone>\nСписок: /accounts"
+            )
+            return
+
+        raw = args[0].strip()
+        phone = raw.replace("+7", "").replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        if phone.startswith("8") and len(phone) == 11:
+            phone = phone[1:]
+        if not phone.isdigit() or len(phone) != 10:
+            await update.message.reply_text(f"Не похоже на номер: '{raw}'. Нужно 10 цифр.")
+            return
+
+        account_path = Path("data/mobile_accounts") / f"{phone}.json"
+        if not account_path.exists():
+            await update.message.reply_text(f"Аккаунт +7{phone} не найден. Сначала /onboard этого номера.")
+            return
+
+        main_path = Path("data/mobile_tokens.json")
+        if not main_path.exists():
+            await update.message.reply_text("data/mobile_tokens.json отсутствует — нечего обновлять.")
+            return
+
+        try:
+            account = json.loads(account_path.read_text(encoding="utf-8"))
+            main = json.loads(main_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            await update.message.reply_text(f"Ошибка чтения JSON: {exc}")
+            return
+
+        if not account.get("access_token") or not account.get("refresh_token"):
+            await update.message.reply_text(f"У аккаунта +7{phone} нет полных токенов.")
+            return
+
+        previous_phone = str(main.get("phone") or "")
+        if previous_phone == phone:
+            await update.message.reply_text(f"Аккаунт +7{phone} уже активный.")
+            return
+
+        ts = datetime.now(self.settings.timezone).strftime("%Y%m%d-%H%M%S")
+        backup_path = main_path.parent / f"mobile_tokens.json.bak.{ts}"
+        backup_path.write_text(main_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        anon = account.get("anon_token") or main.get("anon_token", "")
+        main["phone"] = phone
+        main["number"] = account.get("card_number") or main.get("number", "")
+        main["access_token"] = account["access_token"]
+        main["refresh_token"] = account["refresh_token"]
+        main["anon_token"] = anon
+        main["token"] = anon
+        main["created"] = self._now_iso()
+
+        self._atomic_write_text(main_path, json.dumps(main, ensure_ascii=False, indent=2))
+
+        await update.message.reply_text(
+            f"✅ Активный аккаунт: +7{phone}\n"
+            f"Имя: {account.get('name') or '?'}\n"
+            f"Карта: {main['number']}\n"
+            f"Был активен: +7{previous_phone or '?'}\n"
+            f"Бэкап: data/{backup_path.name}"
+        )
+
+    async def onboard_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if update.message:
+            await update.message.reply_text("Онбординг отменён.")
+        context.user_data.pop("onboard_phone", None)
+        context.user_data.pop("onboard_card_number", None)
+        return ConversationHandler.END
 
     async def _collect_impl(
         self,
@@ -2825,11 +3753,21 @@ class VkusvillGroupBot:
             LOGGER.exception("Collect failed")
             return False
 
+        archived_wave_ids = self._archive_wave_history(day)
+        if archived_wave_ids:
+            self.store.set_meta("last_wave_snapshot_archive_at", self._now_iso())
         items, collect_mode_label = self._merge_items_for_collect_mode(day, existing, items, mode)
         fetched_regular_count = self._regular_inshop_count(items)
+        selected_source = str(collect_meta.get("selected_source") or "primary")
+        used_failover = bool(collect_meta.get("used_failover"))
         # Guard against accidental downgrade when replacement limit is reached:
         # if we already have full 18/18, do not overwrite with a partial wave.
-        if mode == "regular" and existing_regular_count >= 18 and fetched_regular_count < 18:
+        if (
+            mode == "regular"
+            and existing_regular_count >= 18
+            and fetched_regular_count < 18
+            and (used_failover or selected_source != "primary")
+        ):
             merged_guard_items = self._merge_snapshot_base_with_live_ready_food(day, existing, items)
             existing_favorite_count = sum(1 for x in merged_guard_items if self._is_favorite_item(x.name, x.source))
             existing_ready_food_count = sum(1 for x in merged_guard_items if self._is_ready_food_offer(x.source))
@@ -2863,8 +3801,14 @@ class VkusvillGroupBot:
             return True
 
         # Additional downgrade protection:
-        # keep richer same-day snapshot when a new collect brings fewer regular slots.
-        if mode == "regular" and existing_regular_count > fetched_regular_count and existing_regular_count > 0:
+        # Keep richer same-day snapshot only when the new collect came from failover.
+        # Primary live sources must win, even if today's surface is partial.
+        if (
+            mode == "regular"
+            and existing_regular_count > fetched_regular_count
+            and existing_regular_count > 0
+            and (used_failover or selected_source != "primary")
+        ):
             merged_guard_items = self._merge_snapshot_base_with_live_ready_food(day, existing, items)
             fresh, removed = self.store.sync_items(day, [self._item_to_row(x) for x in merged_guard_items], allow_delete=True)
             all_items = self.store.list_items(day)
@@ -2877,7 +3821,6 @@ class VkusvillGroupBot:
             self.store.set_meta("last_collect_day", day)
             self.store.set_meta("last_collect_regular_count", str(regular_count))
             self.store.set_meta("last_collect_total_items", str(len(all_items)))
-            selected_source = str(collect_meta.get("selected_source") or "primary")
             self.store.set_meta("last_collect_source", selected_source)
             self.store.set_meta("last_collect_attempts", self._format_collect_attempts(collect_meta.get("attempts") or []))
             self.store.set_meta(
@@ -2903,7 +3846,7 @@ class VkusvillGroupBot:
         ready_food_count = sum(1 for x in all_items if self._is_ready_food_offer(x.source))
         archived_snapshot_id = self._archive_day_snapshot(day, all_items, "ok")
         try:
-            self._write_webapp_latest_snapshot(day, all_items)
+            self._write_webapp_snapshot_for_current_collect(day, all_items)
         except Exception as exc:
             LOGGER.warning("Failed to write latest webapp snapshot: %s", exc)
         self.store.set_meta("last_collect_at", self._now_iso())
@@ -2913,7 +3856,6 @@ class VkusvillGroupBot:
         self.store.set_meta("last_collect_day", day)
         self.store.set_meta("last_collect_regular_count", str(regular_count))
         self.store.set_meta("last_collect_total_items", str(len(all_items)))
-        selected_source = str(collect_meta.get("selected_source") or "primary")
         self.store.set_meta("last_collect_source", selected_source)
         self.store.set_meta("last_collect_mode", collect_mode_label)
         self.store.set_meta("last_collect_attempts", self._format_collect_attempts(collect_meta.get("attempts") or []))
@@ -2931,7 +3873,7 @@ class VkusvillGroupBot:
         self.store.set_meta("last_mirror_status", "ok" if mirror_ok else "error")
         self.store.set_meta("last_mirror_detail", mirror_detail)
         publish_suffix = ""
-        if mirror_ok and self.settings.auto_publish_pages:
+        if self.settings.auto_publish_pages:
             publish_ok, publish_detail = await self._publish_pages()
             self.store.set_meta("last_publish_at", self._now_iso())
             self.store.set_meta("last_publish_status", "ok" if publish_ok else "error")
@@ -2992,9 +3934,51 @@ class VkusvillGroupBot:
                     "Проверь сессию VkusVill."
                 ),
             )
+        # Парсер-аномалия: regular_count исторически = {0, 6, 18}.
+        # Любое другое значение = вероятно сломалась HTML-разметка сайта.
+        known_regular_values = {0, 6, 18}
+        if (
+            regular_count not in known_regular_values
+            and self._should_notify_parser_anomaly(day, regular_count)
+        ):
+            await self._send_owner(
+                app,
+                (
+                    f"⚠️ Парсер: подборка отдала {regular_count} regular товаров. "
+                    f"Норма: 0/6/18 — возможно, изменилась разметка vkusvill.ru.\n"
+                    f"Источник: {selected_source}, total={unique_item_count}, "
+                    f"любимый={favorite_count}, готовая еда={ready_food_count}.\n"
+                    f"Проверь /daycheck и логи сбора."
+                ),
+            )
         return True
 
     async def scheduled_collect(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        # Pre-collect session health check for http_api
+        if self.settings.provider == "http_api" and self.settings.order_executor_command:
+            last_status = (self.store.get_meta("last_sessioncheck_status") or "").strip().lower()
+            last_at_raw = self.store.get_meta("last_sessioncheck_at") or ""
+            need_check = True
+            if last_status == "ok" and last_at_raw:
+                try:
+                    last_at = datetime.fromisoformat(last_at_raw)
+                    if last_at.tzinfo is None:
+                        last_at = last_at.replace(tzinfo=self.settings.timezone)
+                    age = datetime.now(self.settings.timezone) - last_at
+                    need_check = age.total_seconds() > 3600
+                except ValueError:
+                    pass
+            if need_check:
+                ok, detail = await self._run_executor_session_preflight(context.application, allow_refresh=False)
+                self.store.set_meta("last_sessioncheck_at", self._now_iso())
+                self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
+                self.store.set_meta("last_sessioncheck_detail", detail)
+                if not ok:
+                    await self._send_owner(
+                        context.application,
+                        f"⚠ Сессия ВкусВилл не прошла проверку перед collect: {detail}\n"
+                        "Cookies могли протухнуть. Collect продолжится, но может упасть.",
+                    )
         await self._collect_impl(
             context.application,
             skip_if_full=True,
@@ -3045,8 +4029,40 @@ class VkusvillGroupBot:
     async def scheduled_morning_audit(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._run_morning_audit(context.application, source="scheduled")
 
+    async def scheduled_voted_stock_refresh(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Refresh stock only for ready_food items that have votes, during order window."""
+        now_time = datetime.now(self.settings.timezone).time()
+        # Only run during order window (09:00 - 12:00)
+        open_t = self.settings.order_window_open_time
+        close_t = self._order_window_close_time()
+        if not (open_t <= now_time <= close_t):
+            return
+
+        day = self._today()
+        totals = self.store.totals_by_item(day)
+        voted_ids = {str(r["item_id"]) for r in totals if int(r.get("qty") or 0) > 0}
+        if not voted_ids:
+            return
+
+        items = self.store.list_items(day)
+        voted_rf = [it for it in items if self._is_ready_food_offer(it.source) and it.item_id in voted_ids]
+        if not voted_rf:
+            return
+
+        try:
+            updated = await asyncio.to_thread(self._refresh_stock_for_items, day, voted_rf)
+            if updated:
+                self._write_webapp_latest_snapshot(day, self.store.list_items(day))
+                if self.settings.auto_publish_pages:
+                    await self._publish_pages()
+                self.store.set_meta("last_voted_stock_refresh_at", self._now_iso())
+                self.store.set_meta("last_voted_stock_refresh_count", str(updated))
+                LOGGER.info("voted stock refresh: updated %d items", updated)
+        except Exception as exc:
+            LOGGER.warning("voted stock refresh failed: %s", exc)
+
     async def scheduled_sessioncheck(self, context: ContextTypes.DEFAULT_TYPE) -> None:
-        ok, detail = await self._run_session_probe()
+        ok, detail = await self._run_session_probe_mobile_first(context.application)
         self.store.set_meta("last_sessioncheck_at", self._now_iso())
         self.store.set_meta("last_sessioncheck_status", "ok" if ok else "error")
         self.store.set_meta("last_sessioncheck_detail", detail)
@@ -3054,8 +4070,23 @@ class VkusvillGroupBot:
         if not ok:
             await self._send_owner(
                 context.application,
-                f"Проверка сессии ВкусВилл: требуется вход в Chrome-профиль ({detail}).",
+                f"Проверка сессии ВкусВилл: нужен вход в Chrome-профиль или mobile auth ({detail}).",
             )
+        # Alert if storage_state.json is getting stale (cookies expire ~36h)
+        _state_path = Path("data") / "vkusvill_storage_state.json"
+        if _state_path.exists():
+            try:
+                _age_h = (
+                    datetime.now(self.settings.timezone)
+                    - datetime.fromtimestamp(_state_path.stat().st_mtime, self.settings.timezone)
+                ).total_seconds() / 3600
+                if _age_h >= 28:
+                    await self._send_owner(
+                        context.application,
+                        f"⚠️ Куки ВкусВилл обновлены {_age_h:.0f}ч назад — скоро протухнут (~36ч). Обнови storage_state.json через Cookie-Editor.",
+                    )
+            except OSError:
+                pass
         await self._run_autonomy_cycle(context.application, source="sessioncheck")
 
     async def scheduled_autonomy_watchdog(self, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3132,7 +4163,7 @@ class VkusvillGroupBot:
             return
 
         if action == "collectnow":
-            await query.answer("Собираю активный batch...")
+            await query.answer("Собираю активный заказ...")
             if query.message is not None:
                 await query.message.reply_text("Запускаю сбор заказа по текущему срезу.")
             await self._finalize_impl(context.application, mode="active")
@@ -3192,13 +4223,13 @@ class VkusvillGroupBot:
         if action == "closecycle":
             await query.answer("Закрываю цикл...")
             day = self._today()
-            closed = self._close_waiting_cycle(day)
+            closed = await self._close_waiting_cycle(context.application, day)
             if query.message is not None:
                 await query.message.reply_text(closed)
             return
 
         if action == "cancelcycle":
-            await query.answer("Отменяю активный batch...")
+            await query.answer("Отменяю активный заказ...")
             day = self._today()
             cancelled = self._cancel_open_cycle(day)
             if query.message is not None:
@@ -3216,7 +4247,7 @@ class VkusvillGroupBot:
             day = self._today()
             cycle = self._current_open_cycle(day) or self._waiting_payment_cycle(day) or self._partial_cycle(day)
             if query.message is not None:
-                await query.message.reply_text(self._format_who_chose_text(day, cycle))
+                await query.message.reply_text(self._format_who_chose_text(day, cycle), parse_mode='HTML')
             return
 
         if action == "debts":
@@ -3287,6 +4318,36 @@ class VkusvillGroupBot:
         day = self._today()
         user_id = update.effective_user.id
         user_name = update.effective_user.full_name
+
+        ptype_early = payload.get("type")
+        if ptype_early == "refresh_stock":
+            self._trace_webapp("refresh_stock_requested")
+            await update.message.reply_text("Обновляю остатки готовой еды...")
+            try:
+                updated = await asyncio.to_thread(self._refresh_ready_food_stock, day)
+                self._write_webapp_latest_snapshot(day, self.store.list_items(day))
+                await self._try_publish_webapp()
+                if self.settings.auto_publish_pages:
+                    await self._publish_pages()
+                await update.message.reply_text(
+                    f"Остатки обновлены ({updated} товаров). Открой Mini App заново через /app."
+                )
+            except Exception as exc:
+                LOGGER.warning("refresh_stock failed: %s", exc)
+                await update.message.reply_text(f"Не удалось обновить: {str(exc)[:120]}")
+            return
+
+        # Block votes after order window closes
+        now_time = datetime.now(self.settings.timezone).time()
+        close_time = self._order_window_close_time()
+        if now_time >= close_time:
+            self._trace_webapp(f"vote_after_window_close now={now_time.strftime('%H:%M')} close={close_time.strftime('%H:%M')}")
+            await update.message.reply_text(
+                f"Окно заказов закрыто (после {close_time.strftime('%H:%M')}). "
+                "Выборы больше не принимаются до завтра."
+            )
+            return
+
         items, _snapshot_source = self._best_available_items(day, restore_into_live=True)
         items_by_id = {x.item_id: x for x in items}
         snapshot_id = self._snapshot_id(items, day)
@@ -3296,6 +4357,11 @@ class VkusvillGroupBot:
             f"parsed type={ptype} payload_day={payload.get('day')} payload_snapshot={payload.get('snapshot_id')} "
             f"items_today={len(items)}"
         )
+        selection_cycle, selection_lock = self._webapp_selection_cycle(day)
+        if selection_lock is not None:
+            self._trace_webapp(f"selection_locked batch={selection_cycle.batch_id if selection_cycle else 'n/a'}")
+            await update.message.reply_text(selection_lock)
+            return
         if ptype == "single_choice":
             item_id = str(payload.get("item_id") or "")
             try:
@@ -3307,7 +4373,14 @@ class VkusvillGroupBot:
                 self._trace_webapp(f"single_choice_not_found item_id={item_id}")
                 await update.message.reply_text("Этот товар уже обновился и исчез из сегодняшнего набора. Открой /app заново.")
                 return
-            batch_id = self.store.set_vote(day, user_id, user_name, item_id, max(0, qty))
+            batch_id = self.store.set_vote(
+                day,
+                user_id,
+                user_name,
+                item_id,
+                max(0, qty),
+                batch_id=selection_cycle.batch_id if selection_cycle is not None else None,
+            )
             self._trace_webapp(f"single_choice_saved item_id={item_id} qty={max(0, qty)}")
             await update.message.reply_text(
                 f"Выбор принят в {self._batch_label(batch_id)}: {items_by_id[item_id].name} -> {max(0, qty)}"
@@ -3330,7 +4403,7 @@ class VkusvillGroupBot:
             qty_map = payload.get("qty") or {}
             selected_positive = 0
             touched = 0
-            batch_id: int | None = None
+            batch_id: int | None = selection_cycle.batch_id if selection_cycle is not None else None
             for item_id, raw_qty in qty_map.items():
                 if item_id not in items_by_id:
                     continue
@@ -3519,7 +4592,23 @@ class VkusvillGroupBot:
             return
         if not await self._check_owner_or_reply(update):
             return
-        await update.message.reply_text(self._close_waiting_cycle(self._today()))
+        await update.message.reply_text(await self._close_waiting_cycle(context.application, self._today()))
+
+    async def delivered(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None:
+            return
+        if not await self._check_owner_or_reply(update):
+            return
+        day = self._today()
+        cycle = self.store.get_latest_cycle(day, ("closed",))
+        if cycle is None:
+            await update.message.reply_text("Сначала закрой заказ через /closecycle, потом отметь доставку через /delivered.")
+            return
+        sent = await self._announce_delivery(context.application, cycle.batch_id)
+        if sent:
+            await update.message.reply_text(f"{self._batch_label(cycle.batch_id)} отмечен как доставленный в группе.")
+        else:
+            await update.message.reply_text(f"{self._batch_label(cycle.batch_id)} уже был отмечен как доставленный.")
 
     async def cancelcycle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -3542,7 +4631,7 @@ class VkusvillGroupBot:
             return
         day = self._today()
         cycle = self._current_open_cycle(day) or self._waiting_payment_cycle(day) or self._partial_cycle(day)
-        await update.message.reply_text(self._format_who_chose_text(day, cycle))
+        await update.message.reply_text(self._format_who_chose_text(day, cycle), parse_mode='HTML')
 
     async def debts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -3584,7 +4673,7 @@ class VkusvillGroupBot:
         day = self._today()
         batch_id = self.store.clear_votes(day)
         if batch_id is None:
-            await update.message.reply_text(f"За {day} нет open batch для очистки.")
+            await update.message.reply_text(f"За {day} нет открытого заказа для очистки.")
             return
         await update.message.reply_text(
             f"Выборы в {self._batch_label(batch_id)} очищены. Можно собирать новый заказ."
@@ -3598,7 +4687,7 @@ class VkusvillGroupBot:
         day = self._today()
         cycle = self.store.get_open_cycle(day)
         if cycle is None:
-            await update.message.reply_text(f"За {day} сейчас нет open batch для точечной очистки.")
+            await update.message.reply_text(f"За {day} сейчас нет открытого заказа для точечной очистки.")
             return
 
         target_user_id, target_user_name, error = self._resolve_clearuser_target(
@@ -3720,7 +4809,7 @@ class VkusvillGroupBot:
                 if cycle is None:
                     self.store.set_meta("last_finalize_outcome", "no_partial_cycle")
                     self.store.set_meta("last_finalize_outcome_at", self._now_iso())
-                    await self._send_owner(app, "Нет batch со статусом «частично добавлен».")
+                    await self._send_owner(app, "Нет заказа со статусом «частично собран».")
                     return
                 payload = self._build_final_payload(day, cycle.batch_id, only_missing=True)
                 effective_mode = "missing"
@@ -3733,10 +4822,10 @@ class VkusvillGroupBot:
                     if waiting is not None:
                         await self._send_owner(
                             app,
-                            f"Сейчас нет недостающих позиций. {self._batch_label(waiting.batch_id)} уже ждет оплаты.",
+                            f"Сейчас нет недостающих позиций. {self._batch_label(waiting.batch_id)} уже ждёт оплаты.",
                         )
                     else:
-                        await self._send_owner(app, "Сейчас нет активного batch для сборки.")
+                        await self._send_owner(app, "Сейчас нет активного заказа для сборки.")
                     return
                 effective_mode = "missing" if cycle.status == "partially_added" else "open"
                 payload = self._build_final_payload(
@@ -3753,13 +4842,26 @@ class VkusvillGroupBot:
                     if waiting is not None:
                         await self._send_owner(
                             app,
-                            f"Сейчас нет open batch. {self._batch_label(waiting.batch_id)} уже ждет оплаты.",
+                            f"Сейчас нет открытого заказа. {self._batch_label(waiting.batch_id)} уже ждёт оплаты.",
                         )
                     else:
-                        await self._send_owner(app, "Сейчас нет open batch для сборки.")
+                        await self._send_owner(app, "Сейчас нет открытого заказа для сборки.")
                     return
                 payload = self._build_final_payload(day, cycle.batch_id, only_missing=False)
                 effective_mode = "open"
+
+            # Pre-finalize: refresh stock for voted ready_food items
+            voted_item_ids = {str(r["item_id"]) for r in (self.store.totals_by_item(day, batch_id=cycle.batch_id) if hasattr(self.store, 'totals_by_item') else []) if int(r.get("qty") or 0) > 0}
+            voted_rf = [
+                it for it in self.store.list_items(day)
+                if self._is_ready_food_offer(it.source) and it.item_id in voted_item_ids
+            ]
+            if voted_rf:
+                try:
+                    updated = await asyncio.to_thread(self._refresh_stock_for_items, day, voted_rf)
+                    await self._send_owner(app, f"Проверил остатки перед заказом: обновлено {updated} позиций.")
+                except Exception as exc:
+                    LOGGER.warning("pre-finalize stock refresh failed: %s", exc)
 
             await self._send_owner(
                 app,
@@ -3795,7 +4897,7 @@ class VkusvillGroupBot:
                     self.store.set_meta("last_finalize_outcome_at", self._now_iso())
                     await self._send_owner(
                         app,
-                        f"У {self._batch_label(cycle.batch_id)} больше нет недостающих позиций. Он ждет оплаты.",
+                        f"У {self._batch_label(cycle.batch_id)} больше нет недостающих позиций. Он ждёт оплаты.",
                     )
                 else:
                     self.store.set_meta("last_finalize_outcome", "empty_open_batch")
@@ -3858,7 +4960,8 @@ class VkusvillGroupBot:
                 notify_chat=False,
             )
             missing = self.store.get_missing_cycle_items(day, cycle.batch_id)
-            if bool(exec_result.get("ok")) and not missing:
+            all_ok = bool(exec_result.get("ok")) and not missing
+            if all_ok:
                 self.store.update_cycle_status(
                     day,
                     cycle.batch_id,
@@ -3867,18 +4970,6 @@ class VkusvillGroupBot:
                 )
                 self.store.set_meta("last_finalize_outcome", "added_waiting_payment")
                 self.store.set_meta("last_finalize_outcome_at", self._now_iso())
-                cart_unique = int(exec_result.get("cart_unique_after") or 0)
-                cart_total_qty = int(exec_result.get("cart_total_qty_after") or 0)
-                final_lines = [
-                    f"{self._batch_label(cycle.batch_id)} собран и добавлен в корзину.",
-                    f"Сумма: {payload['total_sum_discount_price']:.2f} RUB",
-                ]
-                if cart_unique > 0:
-                    final_lines.append(
-                        f"В корзине сейчас: {cart_unique} позиций, суммарное кол-во: {cart_total_qty}."
-                    )
-                final_lines.append("Статус: ждет оплаты.")
-                await self._send(app, "\n".join(final_lines))
             else:
                 self.store.update_cycle_status(
                     day,
@@ -3888,15 +4979,12 @@ class VkusvillGroupBot:
                 )
                 self.store.set_meta("last_finalize_outcome", "partially_added")
                 self.store.set_meta("last_finalize_outcome_at", self._now_iso())
-                failed = max(0, int(exec_result.get("total") or 0) - int(exec_result.get("ok_count") or 0))
-                partial_lines = [
-                    f"{self._batch_label(cycle.batch_id)} обработан частично.",
-                    f"Сумма выбранного: {payload['total_sum_discount_price']:.2f} RUB",
-                ]
-                if failed > 0:
-                    partial_lines.append(f"Не добавилось: {failed} поз.")
-                partial_lines.append("Owner доберет недостающее отдельно.")
-                await self._send(app, "\n".join(partial_lines))
+
+            # Build per-user receipt for group chat
+            report_msg = self._build_finalize_receipt(
+                payload, exec_result, cycle.batch_id, all_ok,
+            )
+            await self._send(app, report_msg)
 
     async def _run_executor_if_needed(
         self,
@@ -3946,23 +5034,39 @@ class VkusvillGroupBot:
 
         log_path = Path(self.settings.out_dir) / "executor_last.log"
 
+        # Skip Chrome launch if session was verified OK recently
+        _last_status = (self.store.get_meta("last_sessioncheck_status") or "").strip().lower()
+        _last_at_raw = self.store.get_meta("last_sessioncheck_at") or ""
+        _skip_pre = False
+        if _last_status == "ok" and _last_at_raw:
+            try:
+                _last_at = datetime.fromisoformat(_last_at_raw)
+                if _last_at.tzinfo is None:
+                    _last_at = _last_at.replace(tzinfo=self.settings.timezone)
+                if (datetime.now(self.settings.timezone) - _last_at).total_seconds() < 4 * 3600:
+                    LOGGER.info("executor preflight skipped: session ok recently")
+                    _skip_pre = True
+            except ValueError:
+                pass
+
         try:
-            # Session preflight: fail fast before cart automation.
-            pre_ok, pre_detail = await self._run_executor_session_preflight(app, allow_refresh=False)
-            if not pre_ok:
-                await self._send_owner(
-                    app,
-                    "Сессия ВкусВилл недействительна. Пробую автообновление сессии через браузер...",
-                )
-                refresh_ok, refresh_detail = await self._run_executor_session_preflight(app, allow_refresh=True)
-                if not refresh_ok:
+            if not _skip_pre:
+                # Session preflight: fail fast before cart automation.
+                pre_ok, pre_detail = await self._run_executor_session_preflight(app, allow_refresh=False)
+                if not pre_ok:
                     await self._send_owner(
                         app,
-                        f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({refresh_detail}).",
+                        "Сессия ВкусВилл недействительна. Пробую автообновление сессии через браузер...",
                     )
-                    self.store.set_meta("last_executor_at", self._now_iso())
-                    self.store.set_meta("last_executor_status", "session_invalid")
-                    return {"ok": False, "status": "session_invalid", "log_path": str(log_path)}
+                    refresh_ok, refresh_detail = await self._run_executor_session_preflight(app, allow_refresh=True)
+                    if not refresh_ok:
+                        await self._send_owner(
+                            app,
+                            f"Автооформление остановлено: не удалось подтвердить сессию ВкусВилл ({refresh_detail}).",
+                        )
+                        self.store.set_meta("last_executor_at", self._now_iso())
+                        self.store.set_meta("last_executor_status", "session_invalid")
+                        return {"ok": False, "status": "session_invalid", "log_path": str(log_path)}
 
             proc = await asyncio.to_thread(
                 self._run_cmd_capture,
@@ -3989,6 +5093,27 @@ class VkusvillGroupBot:
                 LOGGER.debug("Skipping executor log write: %s", exc)
 
             if isinstance(payload, dict):
+                report_checks = payload.get("checks") or []
+                ok_count = sum(1 for x in report_checks if bool((x or {}).get("ok")))
+                total = int(payload.get("targets") or len(report_checks) or 0)
+                report_path = self._write_reconciliation_report(
+                    day,
+                    batch_id,
+                    out_path,
+                    {
+                        "ok": bool(payload.get("ok")),
+                        "status": "success" if bool(payload.get("ok")) else "partial",
+                        "ok_count": ok_count,
+                        "total": total,
+                        "breaker_triggered": bool(payload.get("breaker_triggered")),
+                        "breaker_threshold": int(payload.get("breaker_threshold") or 0),
+                        "cart_unique_before": int(payload.get("cart_unique_before") or 0),
+                        "cart_total_qty_before": int(payload.get("cart_total_qty_before") or 0),
+                        "cart_unique_after": int(payload.get("cart_unique_after") or 0),
+                        "cart_total_qty_after": int(payload.get("cart_total_qty_after") or 0),
+                        "checks": report_checks,
+                    },
+                )
                 if payload.get("error"):
                     err_short = str(payload.get("error") or "").strip().splitlines()[0][:220]
                     await self._send_owner(
@@ -3997,17 +5122,19 @@ class VkusvillGroupBot:
                     )
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "failed_error")
-                    return {"ok": False, "status": "failed_error", "log_path": str(log_path)}
-                checks = payload.get("checks") or []
-                ok_count = sum(1 for x in checks if bool((x or {}).get("ok")))
-                total = int(payload.get("targets") or len(checks) or 0)
+                    return {
+                        "ok": False,
+                        "status": "failed_error",
+                        "log_path": str(log_path),
+                        "report_path": str(report_path) if report_path else "",
+                    }
                 self.store.apply_executor_results(
                     day=day,
                     batch_id=batch_id,
                     executor_status=("success" if bool(payload.get("ok")) else "partial"),
                     ok_count=ok_count,
                     total=total,
-                    checks=checks if isinstance(checks, list) else [],
+                    checks=report_checks if isinstance(report_checks, list) else [],
                 )
                 if total <= 0:
                     msg = str(payload.get("message") or "").strip()
@@ -4018,20 +5145,25 @@ class VkusvillGroupBot:
                         await self._send_owner(app, f"Executor success_no_targets. Техлог: {log_path}")
                     self.store.set_meta("last_executor_at", self._now_iso())
                     self.store.set_meta("last_executor_status", "success_no_targets")
-                    return {"ok": True, "status": "success_no_targets", "log_path": str(log_path)}
+                    return {
+                        "ok": True,
+                        "status": "success_no_targets",
+                        "log_path": str(log_path),
+                        "report_path": str(report_path) if report_path else "",
+                    }
                 failed = max(0, total - ok_count)
                 already_in_cart = sum(
-                    1 for x in checks if str((x or {}).get("reason") or "") == "already_in_cart"
+                    1 for x in report_checks if str((x or {}).get("reason") or "") == "already_in_cart"
                 )
                 newly_added = sum(
                     1
-                    for x in checks
+                    for x in report_checks
                     if bool((x or {}).get("ok"))
                     and str((x or {}).get("reason") or "") != "already_in_cart"
                 )
                 tomorrow_only = sum(
                     1
-                    for x in checks
+                    for x in report_checks
                     if str((x or {}).get("reason") or "") == "requires_tomorrow_delivery"
                 )
                 cart_unique = int(payload.get("cart_unique_after") or 0)
@@ -4058,6 +5190,7 @@ class VkusvillGroupBot:
                         "total": total,
                         "cart_unique_after": cart_unique,
                         "cart_total_qty_after": cart_total_qty,
+                        "report_path": str(report_path) if report_path else "",
                     }
                 else:
                     lines = [f"Корзина обновлена частично: {ok_count}/{total}, не добавлено {failed}."]
@@ -4101,11 +5234,24 @@ class VkusvillGroupBot:
                         "click_no_effect": "кнопка нажалась, но товар не появился в корзине",
                         "circuit_breaker_open": "пропущено из-за защитной остановки",
                         "not_added_to_cart": "не удалось добавить",
+                        "no_discount": "добавился по обычной цене — скидка не применилась (не в активной подборке)",
+                        "price_mismatch": "цена в корзине отличается от ожидаемой",
+                        "sold_out": "нет в наличии",
+                        "no_xmlid": "нет xmlid — некорректный item_id",
                     }
-                    bad = [x for x in checks if not bool((x or {}).get("ok"))][:6]
+                    bad = [x for x in report_checks if not bool((x or {}).get("ok"))][:6]
                     for row in bad:
                         reason = str(row.get("reason") or "not_added_to_cart")
-                        reason_h = reason_map.get(reason, reason)
+                        if reason.startswith("partial_qty_"):
+                            # partial_qty_<actual>_of_<requested>
+                            parts = reason.split("_")
+                            try:
+                                a, rq = int(parts[2]), int(parts[4])
+                                reason_h = f"добавилось {a} из {rq}"
+                            except Exception:
+                                reason_h = "добавилось частично"
+                        else:
+                            reason_h = reason_map.get(reason, reason)
                         lines.append(
                             (
                                 f"- {row.get('name', '?')}: было {row.get('before_qty', 0)}, "
@@ -4128,6 +5274,7 @@ class VkusvillGroupBot:
                         "total": total,
                         "cart_unique_after": cart_unique,
                         "cart_total_qty_after": cart_total_qty,
+                        "report_path": str(report_path) if report_path else "",
                     }
             else:
                 if proc.returncode == 0:
@@ -4159,6 +5306,7 @@ class VkusvillGroupBot:
 
     async def scheduled_finalize(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._finalize_impl(context.application)
+        await self._announce_order_window_closed(context.application)
 
     async def health(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None:
@@ -4220,6 +5368,9 @@ class VkusvillGroupBot:
         autonomy_note = self.store.get_meta("autonomy_note") or "n/a"
         autonomy_updated_at = self.store.get_meta("autonomy_updated_at") or "n/a"
         best_snapshot = self.store.get_best_day_snapshot(day)
+        last_wave_snapshot_id = self.store.get_meta("last_wave_snapshot_id") or "n/a"
+        last_wave_snapshot_status = self.store.get_meta("last_wave_snapshot_status") or "n/a"
+        last_wave_snapshot_count = self.store.get_meta("last_wave_snapshot_count") or "n/a"
         best_snapshot_text = (
             f"{best_snapshot.snapshot_id} ({best_snapshot.regular_count}/18, total={best_snapshot.total_items}, {best_snapshot.status})"
             if best_snapshot is not None
@@ -4266,7 +5417,7 @@ class VkusvillGroupBot:
         elif last_executor_status in {"failed_error", "failed_no_payload", "exception", "session_invalid"}:
             historical.append(f"старый executor был в ошибке ({last_executor_status}, {last_executor_at})")
         if open_cycle is not None and open_cycle.status == "finalizing":
-            critical.append("batch завис в finalizing")
+            critical.append("заказ завис на финальной сверке")
         if last_image_health_status == "warning" and self._iso_is_today(last_image_health_at):
             warnings.append(f"последняя проверка картинок требует внимания ({last_image_health_detail})")
         elif last_image_health_status == "warning":
@@ -4318,6 +5469,7 @@ class VkusvillGroupBot:
             f"- last_finalize_outcome: {self._finalize_outcome_human(last_finalize_outcome)} at={last_finalize_outcome_at}",
             f"- autonomy: state={autonomy_state}, at={autonomy_updated_at}, note={autonomy_note}",
             f"- startup_recovery: {startup_recovery_note} at={startup_recovery_at}",
+            f"- last_wave_snapshot: id={last_wave_snapshot_id}, status={last_wave_snapshot_status}, count={last_wave_snapshot_count}",
             f"- best_snapshot: {best_snapshot_text}",
         ]
         if critical:
@@ -4343,22 +5495,24 @@ class VkusvillGroupBot:
             "/collectregular - обновить только 1/2/3 и любимый (owner)\n"
             "/collectready - обновить только готовую еду (owner)\n"
             "/morningaudit - жесткий прогон скидок/еды и daycheck (owner)\n"
+            "/delivered - отметить доставку заказа в группе (owner)\n"
+            "/schedule - показать/изменить окно заказов (owner)\n"
             "/mirror [YYYY-MM-DD] - собрать локальный кэш картинок (owner)\n"
             "/publishapp - опубликовать Mini App на GitHub Pages (owner)\n"
             "/collectnow - собрать итоговый заказ сейчас (owner)\n"
             "/retrymissing - добрать только недостающие позиции (owner)\n"
-            "/closecycle - закрыть batch после оплаты (owner)\n"
+            "/closecycle - закрыть заказ после оплаты (owner)\n"
             "/debts - долги и быстрые отметки оплаты (owner)\n"
-            "/cancelcycle - отменить текущий активный batch (owner)\n"
-            "/cyclestatus - статусы batch-циклов за сегодня (owner)\n"
-            "/whochose - кто что выбрал в текущем batch (owner)\n"
+            "/cancelcycle - отменить текущий активный заказ (owner)\n"
+            "/cyclestatus - статусы заказов за сегодня (owner)\n"
+            "/whochose - кто что выбрал в текущем заказе (owner)\n"
             "/daycheck - проверить целостность сегодняшнего набора (owner)\n"
             "/finalize - собрать итоговый заказ (owner)\n"
             "/resetday - очистить данные текущего дня (owner)\n"
             "/clearuser - снять весь выбор одного человека (owner, reply)\n"
             "/clearvotes - очистить только выборы за сегодня (owner)\n"
             "/cart - сверить корзину с сегодняшними скидками (owner)\n"
-            "/sessioncheck - проверка логина Chrome-профиля (owner)\n"
+            "/sessioncheck - проверка логина mobile-first с Chrome fallback (owner)\n"
             "/mobilecheck - проверка mobile API session без Playwright (owner)\n"
             "/health - быстрый статус бота (owner)\n"
             "/setowner - назначить/проверить owner\n"
@@ -4422,9 +5576,11 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("collectregular", self.collectregular))
         app.add_handler(CommandHandler("collectready", self.collectready))
         app.add_handler(CommandHandler("morningaudit", self.morningaudit))
+        app.add_handler(CommandHandler("delivered", self.delivered))
         app.add_handler(CommandHandler("mirror", self.mirror))
         app.add_handler(CommandHandler("publishapp", self.publishapp))
         app.add_handler(CommandHandler("setowner", self.setowner))
+        app.add_handler(CommandHandler("schedule", self.schedule))
         app.add_handler(CommandHandler("where", self.where))
         app.add_handler(CommandHandler("selftest", self.selftest))
         app.add_handler(CommandHandler("app", self.app))
@@ -4446,6 +5602,17 @@ class VkusvillGroupBot:
         app.add_handler(CommandHandler("clearvotes", self.clearvotes))
         app.add_handler(CommandHandler("sessioncheck", self.sessioncheck))
         app.add_handler(CommandHandler("mobilecheck", self.mobilecheck))
+        app.add_handler(CommandHandler("accounts", self.accounts))
+        app.add_handler(CommandHandler("useaccount", self.useaccount))
+        app.add_handler(ConversationHandler(
+            entry_points=[CommandHandler("onboard", self.onboard_start)],
+            states={
+                self.ONBOARD_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.onboard_phone)],
+                self.ONBOARD_OTP: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.onboard_otp)],
+            },
+            fallbacks=[CommandHandler("cancel", self.onboard_cancel)],
+            conversation_timeout=300,
+        ))
         app.add_handler(CommandHandler("help", self.help))
         app.add_handler(CallbackQueryHandler(self.on_control, pattern=r"^ctl\|"))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.on_webapp_data))
@@ -4462,6 +5629,7 @@ class VkusvillGroupBot:
                 time=t,
                 name=f"morning-audit-{t.hour:02d}:{t.minute:02d}",
             )
+        self._reschedule_order_window_jobs(app)
         app.job_queue.run_daily(
             self.scheduled_db_backup,
             time=datetime.strptime("02:00", "%H:%M").time(),
@@ -4488,6 +5656,12 @@ class VkusvillGroupBot:
             interval=30 * 60,
             first=180,
             name="autonomy-watchdog",
+        )
+        app.job_queue.run_repeating(
+            self.scheduled_voted_stock_refresh,
+            interval=30 * 60,
+            first=300,
+            name="voted-stock-refresh",
         )
         app.job_queue.run_once(
             self.scheduled_startup_sanity,

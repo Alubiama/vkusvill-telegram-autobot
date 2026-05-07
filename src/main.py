@@ -8,6 +8,20 @@ import socket
 import time
 from pathlib import Path
 
+
+# --- IPv4 preference patch (avoid unreachable IPv6 to Telegram API) ---
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_preferred_getaddrinfo(*args, **kwargs):
+    results = _original_getaddrinfo(*args, **kwargs)
+    ipv4 = [r for r in results if r[0] == socket.AF_INET]
+    return ipv4 if ipv4 else results
+
+
+socket.getaddrinfo = _ipv4_preferred_getaddrinfo
+# --- end IPv4 patch ---
+
 from dotenv import load_dotenv
 from telegram.error import NetworkError, RetryAfter, TimedOut
 

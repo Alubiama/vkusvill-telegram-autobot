@@ -1,0 +1,124 @@
+[
+  {
+    "method": "POST",
+    "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+    "post_data": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fgoods%2Fris-s-kurinoy-brizolyu-67492.html&commonData%5Bcur_title%5D=%D0%A0%D0%B8%D1%81+%D1%81+%D0%BA%D1%83%D1%80%D0%B8%D0%BD%D0%BE%D0%B9+%D0%B1%D1%80%D0%B8%D0%B7%D0%BE%D0%BB%D1%8C%D1%8E+%D0%BA%D1%83%D0%BF%D0%B8%D1%82%D1%8C+%D1%81+%D0%B4%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%BE%D0%B9+%D0%BD%D0%B0+%D0%B4%D0%BE%D0%BC+%D0%B8%D0%B7+%D0%92%D0%BA%D1%83%D1%81%D0%92%D0%B8%D0%BB%D0%BB%D0%B0&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=product_detail&commonData%5Bsection_name%5D=%D0%92%D1%82%D0%BE%D1%80%D1%8B%D0%B5+%D0%B1%D0%BB%D1%8E%D0%B4%D0%B0+%D1%81+%D0%BF%D1%82%D0%B8%D1%86%D0%B5%D0%B9&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bref_tov_id%5D=67492&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=page_view&arParams%5B0%5D%5Bid_element%5D=tov_detail&sessid=d711d2ae1614cbe7c4071624218bf110",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "*/*",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://vkusvill.ru/ajax/user_v2/cabinet/order_last_repeat_block.php",
+    "post_data": "sessid=d711d2ae1614cbe7c4071624218bf110",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "text/html, */*; q=0.01",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://vkusvill.ru/ajax/address_way/modals/wait_delivery_status_modal.php?isApp=false&_=1776185033241",
+    "post_data": null,
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "*/*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://vkusvill.ru/ajax/notifications/get.php",
+    "post_data": "types%5Borders%5D=Y&types%5Buser_lk_orders%5D=N&types%5Border_detail_status%5D=N&types%5Bservice_banner%5D=Y&types%5Bchat%5D=Y&types%5Bmedia_comments%5D=N&types%5Bproducts_comments%5D=Y&card=9592053",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://vkusvill.ru/upload/ext_assets/vk_openapi.js?v=c5c26a67b6b2a334cfe359f3e41c79ba",
+    "post_data": null,
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://vkusvill.ru/ajax/address_way/modals/my_addresses/ma_loader.php",
+    "post_data": "loadAssets=Y&startShops=N&type=list&needFillAddrID=",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/goods/ris-s-kurinoy-brizolyu-67492.html",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "x-requested-with": "XMLHttpRequest",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "*/*",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64d0v9107572194z8831460186za20gzb831460186zd831460186&_p=1776185038206&_gaz=1&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1025322698&_eu=EAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=19&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&gaf=2&_s=1&tag_exp=0~115938466~115938469~117266400&sid=1776185042&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fgoods%2Fris-s-kurinoy-brizolyu-67492.html&dt=%D0%A0%D0%B8%D1%81%20%D1%81%20%D0%BA%D1%83%D1%80%D0%B8%D0%BD%D0%BE%D0%B9%20%D0%B1%D1%80%D0%B8%D0%B7%D0%BE%D0%BB%D1%8C%D1%8E%20%D0%BA%D1%83%D0%BF%D0%B8%D1%82%D1%8C%20%D1%81%20%D0%B4%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%BE%D0%B9%20%D0%BD%D0%B0%20%D0%B4%D0%BE%D0%BC%20%D0%B8%D0%B7%20%D0%92%D0%BA%D1%83%D1%81%D0%92%D0%B8%D0%BB%D0%BB%D0%B0&en=page_view&_ss=1&tfd=13858",
+    "post_data": null,
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64d0v9107572194z8831460186za20gzb831460186zd831460186&_p=1776185038206&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1025322698&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&frm=0&ir=1&pscdl=noapi&rcb=19&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&gaf=2&_s=2&tag_exp=0~115938466~115938469~117266400~117971173&cu=RUB&sid=1776185042&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fgoods%2Fris-s-kurinoy-brizolyu-67492.html&dt=%D0%A0%D0%B8%D1%81%20%D1%81%20%D0%BA%D1%83%D1%80%D0%B8%D0%BD%D0%BE%D0%B9%20%D0%B1%D1%80%D0%B8%D0%B7%D0%BE%D0%BB%D1%8C%D1%8E%20%D0%BA%D1%83%D0%BF%D0%B8%D1%82%D1%8C%20%D1%81%20%D0%B4%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%BE%D0%B9%20%D0%BD%D0%B0%20%D0%B4%D0%BE%D0%BC%20%D0%B8%D0%B7%20%D0%92%D0%BA%D1%83%D1%81%D0%92%D0%B8%D0%BB%D0%BB%D0%B0&en=view_item&pr1=nm%D0%A0%D0%B8%D1%81%20%D1%81%C2%A0%D0%BA%D1%83%D1%80%D0%B8%D0%BD%D0%BE%D0%B9%20%D0%B1%D1%80%D0%B8%D0%B7%D0%BE%D0%BB%D1%8C%D1%8E~id67492~ln%D0%A1%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0%20%D1%82%D0%BE%D0%B2%D0%B0%D1%80%D0%B0~lp1~qt1~ca%D0%93%D0%BE%D1%82%D0%BE%D0%B2%D0%B0%D1%8F%20%D0%B5%D0%B4%D0%B0~c2%D0%92%D1%82%D0%BE%D1%80%D1%8B%D0%B5%20%D0%B1%D0%BB%D1%8E%D0%B4%D0%B0~c3%D0%92%D1%82%D0%BE%D1%80%D1%8B%D0%B5%20%D0%B1%D0%BB%D1%8E%D0%B4%D0%B0%20%D1%81%C2%A0%D0%BF%D1%82%D0%B8%D1%86%D0%B5%D0%B9&_et=59&tfd=13942",
+    "post_data": null,
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64d0v9107572194z8831460186za20gzb831460186zd831460186&_p=1776185038206&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1025322698&_eu=EAAAAGQ&are=1&cid=1779456938.1775810964&frm=0&ir=1&pscdl=noapi&rcb=19&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&gaf=2&_s=3&tag_exp=0~115938466~115938469~117266400~117971173&sid=1776185042&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fgoods%2Fris-s-kurinoy-brizolyu-67492.html&dt=%D0%A0%D0%B8%D1%81%20%D1%81%20%D0%BA%D1%83%D1%80%D0%B8%D0%BD%D0%BE%D0%B9%20%D0%B1%D1%80%D0%B8%D0%B7%D0%BE%D0%BB%D1%8C%D1%8E%20%D0%BA%D1%83%D0%BF%D0%B8%D1%82%D1%8C%20%D1%81%20%D0%B4%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%BE%D0%B9%20%D0%BD%D0%B0%20%D0%B4%D0%BE%D0%BC%20%D0%B8%D0%B7%20%D0%92%D0%BA%D1%83%D1%81%D0%92%D0%B8%D0%BB%D0%BB%D0%B0&en=UserID&ep.UserID=9592053&_et=3&tfd=18944",
+    "post_data": null,
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://vkusvill.ru/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  }
+]

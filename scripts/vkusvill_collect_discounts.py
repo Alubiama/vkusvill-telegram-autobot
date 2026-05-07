@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import errno
@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus
-
-from playwright.sync_api import sync_playwright
-
-
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 RUB_RE = re.compile(r"(\d[\d\s]*[.,]?\d*)\s*(?:₽|руб|в‚Ѕ|СЂСѓР±)", re.IGNORECASE)
 STOCK_QTY_RE = re.compile(r"(?:в\s*наличии|осталось)\s*[:\\-]?\s*(\d{1,4})\s*шт", re.IGNORECASE)
 
@@ -1108,6 +1108,15 @@ def _write_today_pool(out_path: Path, run_day: str, items: list[DiscountItem]) -
     _atomic_write(date_path, run_day)
 
 
+def _waves_path(out_path: Path) -> Path:
+    return out_path.with_name(f"{out_path.stem}.waves.json")
+
+
+def _write_wave_history(out_path: Path, run_day: str, waves: list[dict[str, object]]) -> None:
+    payload = {"day": run_day, "waves": waves}
+    _atomic_write(_waves_path(out_path), json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 def _open_discounts_area(page) -> None:
     _goto_with_retry(page, "https://vkusvill.ru/personal/", wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_timeout(1800)
@@ -1281,9 +1290,18 @@ def _click_refresh_discounts(page) -> tuple[bool, bool, bool]:
     return changed, False, False
 
 
-def _collect_waves(page, source: str, waves: int, require_distinct_waves: bool) -> list[DiscountItem]:
+def _collect_waves(
+    page,
+    source: str,
+    waves: int,
+    require_distinct_waves: bool,
+    *,
+    out_path: Path,
+    run_day: str,
+) -> list[DiscountItem]:
     merged: dict[str, DiscountItem] = {}
     wave_fps: list[str] = []
+    wave_history: list[dict[str, object]] = []
     total_waves = max(1, waves)
     refresh_exhausted = False
     for wave_idx in range(total_waves):
@@ -1301,11 +1319,22 @@ def _collect_waves(page, source: str, waves: int, require_distinct_waves: bool) 
         wave_ids = sorted(x.item_id for x in current)
         wave_fp = "|".join(wave_ids)
         wave_fps.append(wave_fp)
+        wave_history.append(
+            {
+                "wave": wave_idx + 1,
+                "fingerprint": wave_fp,
+                "items": [item.as_dict() for item in current],
+            }
+        )
 
         _log(f"[collector] wave {wave_idx + 1}: found {len(current)} inshop items")
         for item in current:
             merged.setdefault(item.item_id, item)
         _log(f"[collector] merged unique items: {len(merged)}")
+        pool_items = list(merged.values())
+        _write_today_pool(out_path, run_day, pool_items)
+        _write_wave_history(out_path, run_day, wave_history)
+        _log(f"[collector] pool saved to disk: {len(pool_items)} items")
 
         if require_distinct_waves and len(current) < 6:
             _save_debug(page, f"wave_{wave_idx + 1}_less_than_6")
@@ -1443,7 +1472,7 @@ def _save_debug(page, prefix: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect VkusVill personal discount items from web cabinet.")
-    parser.add_argument("--source", choices=["storage_state", "system_chrome"], default="system_chrome")
+    parser.add_argument("--source", choices=["auto", "storage_state", "system_chrome"], default="auto")
     parser.add_argument("--state-file", default="data/vkusvill_storage_state.json")
     parser.add_argument("--chrome-user-data-dir", default="")
     parser.add_argument("--chrome-profile-name", default="Default")
@@ -1486,7 +1515,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
+def _collect_with_storage_state(args: argparse.Namespace, *, out_path: Path, run_day: str) -> list[DiscountItem]:
     state_file = Path(args.state_file)
     if not state_file.exists():
         raise SystemExit(f"State file not found: {state_file}")
@@ -1514,6 +1543,8 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
             "vkusvill_web_storage_state",
             waves=args.waves,
             require_distinct_waves=bool(args.require_distinct_waves),
+            out_path=out_path,
+            run_day=run_day,
         )
         if args.offers_ready_food_url:
             extra = _collect_offers_ready_food(
@@ -1531,7 +1562,20 @@ def _collect_with_storage_state(args: argparse.Namespace) -> list[DiscountItem]:
     return items
 
 
-def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
+def _collect_with_auto_source(args: argparse.Namespace, *, out_path: Path, run_day: str) -> list[DiscountItem]:
+    state_file = Path(args.state_file)
+    if state_file.exists():
+        try:
+            return _collect_with_storage_state(args, out_path=out_path, run_day=run_day)
+        except SystemExit as exc:
+            message = str(exc)
+            if "storage_state" not in message and "State file not found" not in message:
+                raise
+            _log(f"[collector] storage_state unavailable, falling back to system chrome: {message}")
+    return _collect_with_system_chrome(args, out_path=out_path, run_day=run_day)
+
+
+def _collect_with_system_chrome(args: argparse.Namespace, *, out_path: Path, run_day: str) -> list[DiscountItem]:
     if args.chrome_user_data_dir:
         user_data_dir = Path(args.chrome_user_data_dir)
     else:
@@ -1649,6 +1693,8 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
                     "vkusvill_web_system_chrome",
                     waves=args.waves,
                     require_distinct_waves=bool(args.require_distinct_waves),
+                    out_path=out_path,
+                    run_day=run_day,
                 )
                 if args.offers_ready_food_url:
                     extra = _collect_offers_ready_food(
@@ -1675,6 +1721,8 @@ def _collect_with_system_chrome(args: argparse.Namespace) -> list[DiscountItem]:
             "vkusvill_web_system_chrome",
             waves=args.waves,
             require_distinct_waves=bool(args.require_distinct_waves),
+            out_path=out_path,
+            run_day=run_day,
         )
         if args.offers_ready_food_url:
             extra = _collect_offers_ready_food(
@@ -1705,9 +1753,11 @@ def main() -> None:
     existing_items = _load_today_pool(out_path, run_day=run_day)
 
     if args.source == "storage_state":
-        items = _collect_with_storage_state(args)
+        items = _collect_with_storage_state(args, out_path=out_path, run_day=run_day)
+    elif args.source == "auto":
+        items = _collect_with_auto_source(args, out_path=out_path, run_day=run_day)
     else:
-        items = _collect_with_system_chrome(args)
+        items = _collect_with_system_chrome(args, out_path=out_path, run_day=run_day)
 
     items = [x for x in items if x.name and x.discount_price > 0]
     items = _merge_items_latest(existing_items, items)

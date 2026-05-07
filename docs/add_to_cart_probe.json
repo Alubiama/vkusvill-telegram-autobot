@@ -1,0 +1,734 @@
+{
+  "clicked": true,
+  "xhr_after": [
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/delivery_order/basket_add.php",
+      "status": 200,
+      "post": "id=90844&xmlid=90844&max=10&delivery_no_set=N&koef=1&step=1&coupon=&isExperiment=N&isOnlyOnline=&isGreen=0&user_id=4021287&skip_analogs=&is_app=&is_default_button=Y&cssInited=N&price_type=6",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "application/json, text/javascript, */*; q=0.01",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resp_headers": {
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "content-security-policy": "frame-ancestors 'self';",
+        "cache-control": "no-store, no-cache, must-revalidate",
+        "content-encoding": "gzip",
+        "pragma": "no-cache",
+        "x-content-type-options": "nosniff",
+        "x-powered-cms": "Bitrix Site Manager (5de1b67d7eb1a402262237b342f35055)",
+        "expires": "Thu, 19 Nov 1981 08:52:00 GMT",
+        "content-length": "1547",
+        "p3p": "policyref=\"/bitrix/p3p.xml\", CP=\"NON DSP COR CUR ADM DEV PSA PSD OUR UNR BUS UNI COM NAV INT DEM STA\"",
+        "date": "Thu, 16 Apr 2026 08:41:47 GMT",
+        "content-type": "text/html; charset=UTF-8",
+        "vary": "HTTPS,Accept-Encoding",
+        "server": "QRATOR",
+        "x-frame-options": "SAMEORIGIN, SAMEORIGIN"
+      },
+      "body_len": 5698,
+      "body": "{\"success\":\"Y\",\"error\":\"\",\"error_type\":\"\",\"rowID\":\"\",\"q\":0,\"max\":\"N\",\"order_params_new\":\"N\",\"delivery_free\":\"N\",\"POPUP_ANALOGS\":\"N\",\"updateBasket\":null,\"isFirst\":\"True\",\"notify\":\"\",\"priceTypeAfter\":6,\"basket_notify\":\"N\",\"order_rules\":{\"HIGH_DEMAND\":0,\"MIN_MINSUM\":0,\"MAX_MINSUM\":0,\"MIN_SUM\":0,\"TYPE\":false,\"INFO_TEXT\":\"\"},\"basketAdded\":{\"ID\":\"90844-0\",\"CODE\":\"tunets-skipdzhek-file-v-masle-140-g\",\"XML_ID\":90844,\"PRODUCT_ID\":90844,\"Q\":1,\"AMOUNT\":null,\"NAME\":\"\\u0422\\u0443\\u043d\\u0435\\u0446 (\\u0441\\u043a\\u0438\\u043f\\u0434\\u0436\\u0435\\u043a) \\u0444\\u0438\\u043b\\u0435 \\u0432 \\u043c\\u0430\\u0441\\u043b\\u0435, 140 \\u0433\",\"IMG\":\"https:\\/\\/img.vkusvill.ru\\/pim\\/images\\/site_thumb\\/092f5ae0-54e3-48f8-a341-bce5aa5df062.jpg?1721862738.4723\",\"PRICE\":148,\"PRICE_PRINT\":\"148\",\"TOTAL\":148,\"TOTAL_PRINT\":\"148<span class=\\\"Currency\\\"><span class=\\\"CurrencyIcon CurrencyIcon--rub\\\"><\\/span><span class=\\\"Currency__text\\\">\\u0440\\u0443\\u0431<\\/span><\\/span>\",\"TOTAL_PRINT_CARD\":\"148<span class=\\\"Currency\\\"><span class=\\\"CurrencyIcon CurrencyIcon--rub\\\"><\\/span><span class=\\\"Currency__text\\\">\\u0440\\u0443\\u0431<\\/span><\\/span>\",\"BASE_PRICE\":185,\"BASE_PRICE_PRINT\":\"185\",\"DIFF_PRICE\":37,\"DIFF_PRICE_PRINT\":\"37\",\"SHOW_IS_KG_IN_PCE\":false,\"UNIT\":\"\\u0448\\u0442\",\"UNIT_CLASS\":\"sht\",\"KOEF\":1,\"STEP\":1,\"MAX_Q\":10,\"MAX_Q_KOEF\":10,\"MAX_Q_INPUT\":40,\"WEIGHT_Q_MAX\":false,\"URL\":\"\\/goods\\/tunets-skipdzhek-file-v-masle-140-g-90844.html\",\"Q_CHANGED_TYPE\":\"\",\"Q_CHANGED_MESSAGE\":\"\",\"CAN_BUY\":\"Y\",\"WEIGHT\":0.14000000000000001,\"WEIGHT_PRINT\":\"140&nbsp;\\u0433\",\"PRICE_TYPE\":6,\"NEW\":false,\"RED_PRICE\":false,\"PRICE_LABEL\":\"Price--label\",\"DIFF_COLOR\":\"\",\"IS_LP\":\"Y\",\"IS_LP_ANALOG\":\"N\",\"IS_FAV\":true,\"IS_GREEN\":0,\"CATEGORY\":\"\\u0420\\u044b\\u0431\\u0430, \\u0438\\u043a\\u0440\\u0430 \\u0438 \\u043c\\u043e\\u0440\\u0435\\u043f\\u0440\\u043e\\u0434\\u0443\\u043a\\u0442\\u044b\\/\\/\\u0420\\u044b\\u0431\\u043d\\u044b\\u0435 \\u043a\\u043e\\u043d\\u0441\\u0435\\u0440\\u0432\\u044b\",\"NEED_CUTLERY\":\"N\",\"API_COLORS\":{\"LABEL_COLOR\":\"\",\"LABEL_BG\":\"#FFFFFF\",\"DIFF_COLOR\":\"#D7144B\"},\"RP_INFO\":{\"text\":null,\"discount\":null},\"RATING\":\"4.9\",\"is_combo\":null,\"desc_text\":null,\"images\":null,\"components\":[]},\"basket\":{\"90844_0\":{\"ID\":\"90844-0\",\"CODE\":\"tunets-skipdzhek-file-v-masle-140-g\",\"XML_ID\":90844,\"PRODUCT_ID\":90844,\"Q\":1,\"AMOUNT\":null,\"NAME\":\"\\u0422\\u0443\\u043d\\u0435\\u0446 (\\u0441\\u043a\\u0438\\u043f\\u0434\\u0436\\u0435\\u043a) \\u0444\\u0438\\u043b\\u0435 \\u0432 \\u043c\\u0430\\u0441\\u043b\\u0435, 140 \\u0433\",\"IMG\":\"https:\\/\\/img.vkusvill.ru\\/pim\\/images\\/site_thumb\\/092f5ae0-54e3-48f8-a341-bce5aa5df062.jpg?1721862738.4723\",\"PRICE\":148,\"PRICE_PRINT\":\"148\",\"TOTAL\":148,\"TOTAL_PRINT\":\"148<span class=\\\"Currency\\\"><span class=\\\"CurrencyIcon CurrencyIcon--rub\\\"><\\/span><span class=\\\"Currency__text\\\">\\u0440\\u0443\\u0431<\\/span><\\/span>\",\"TOTAL_PRINT_CARD\":\"148<span class=\\\"Currency\\\"><span class=\\\"CurrencyIcon CurrencyIcon--rub\\\"><\\/span><span class=\\\"Currency__text\\\">\\u0440\\u0443\\u0431<\\/span><\\/span>\",\"BASE_PRICE\":185,\"BASE_PRICE_PRINT\":\"185\",\"DIFF_PRICE\":37,\"DIFF_PRICE_PRINT\":\"37\",\"SHOW_IS_KG_IN_PCE\":false,\"UNIT\":\"\\u0448\\u0442\",\"UNIT_CLASS\":\"sht\",\"KOEF\":1,\"STEP\":1,\"MAX_Q\":10,\"MAX_Q_KOEF\":10,\"MAX_Q_INPUT\":40,\"WEIGHT_Q_MAX\":false,\"URL\":\"\\/goods\\/tunets-skipdzhek-file-v-masle-140-g-90844.html\",\"Q_CHANGED_TYPE\":\"\",\"Q_CHANGED_MESSAGE\":\"\",\"CAN_BUY\":\"Y\",\"WEIGHT\":0.14000000000000001,\"WEIGHT_PRINT\":\"140&nbsp;\\u0433\",\"PRICE_TYPE\":6,\"NEW\":false,\"RED_PRICE\":false,\"PRICE_LABEL\":\"Price--label\",\"DIFF_COLOR\":\"\",\"IS_LP\":\"Y\",\"IS_LP_ANALOG\":\"N\",\"IS_FAV\":true,\"IS_GREEN\":0,\"CATEGORY\":\"\\u0420\\u044b\\u0431\\u0430, \\u0438\\u043a\\u0440\\u0430 \\u0438 \\u043c\\u043e\\u0440\\u0435\\u043f\\u0440\\u043e\\u0434\\u0443\\u043a\\u0442\\u044b\\/\\/\\u0420\\u044b\\u0431\\u043d\\u044b\\u0435 \\u043a\\u043e\\u043d\\u0441\\u0435\\u0440\\u0432\\u044b\",\"NEED_CUTLERY\":\"N\",\"API_COLORS\":{\"LABEL_COLOR\":\"\",\"LABEL_BG\":\"#FFFFFF\",\"DIFF_COLOR\":\"#D7144B\"},\"RP_INFO\":{\"text\":null,\"discount\":null},\"RATING\":\"4.9\",\"is_combo\":null,\"desc_text\":null,\"images\":null,\"components\":[]}},\"totals\":{\"DELIVERY_PRICE\":0,\"DELIVERY_PRICE_PRINT\":\"0\",\"LOYAL_SUM_PR"
+    },
+    {
+      "method": "POST",
+      "url": "https://eye.targetads.io/web/collect?dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&ref=&ul=en-us&ww=1280&wh=720&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&pid=12796&cid=6035786084806848048&yandexuid=&edttm=1776328906&sid=329804507&ss=1",
+      "status": 200,
+      "post": "{\"event_name\":\"page_view\",\"ycid\":\"1774467377727014799\",\"gcid\":\"GA1.1.1779456938.1775810964\"}",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "text/plain",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {
+        "access-control-allow-origin": "https://vkusvill.ru",
+        "cache-control": "no-cache, no-store, must-revalidate, max-age=0",
+        "content-length": "19",
+        "date": "Thu, 16 Apr 2026 08:41:47 GMT",
+        "content-type": "text/plain; charset=utf-8",
+        "cross-origin-resource-policy": "cross-origin",
+        "access-control-allow-credentials": "true"
+      },
+      "body_len": 19,
+      "body": "6035786084806848048"
+    },
+    {
+      "method": "POST",
+      "url": "https://eye.targetads.io/web/collect?dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&ref=&ul=en-us&ww=1280&wh=720&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&pid=12796&cid=6035786084806848048&yandexuid=&edttm=1776328907&sid=329804507",
+      "status": 200,
+      "post": "{\"ecommerce_items\":{\"id\":[\"90844\"],\"title\":[\"Тунец (скипджек) филе в масле, 140 г\"],\"category1\":[\"Рыба, икра и морепродукты\"],\"category2\":[\"Рыбные консервы\"],\"brand\":[\"\"],\"variant\":[\"\"],\"quantity\":[1],\"price\":[148]},\"event_name\":\"add_to_cart\",\"ycid\":\"1774467377727014799\",\"gcid\":\"GA1.1.1779456938.1775810964\"}",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "text/plain",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {
+        "access-control-allow-origin": "https://vkusvill.ru",
+        "cache-control": "no-cache, no-store, must-revalidate, max-age=0",
+        "content-length": "19",
+        "date": "Thu, 16 Apr 2026 08:41:47 GMT",
+        "content-type": "text/plain; charset=utf-8",
+        "cross-origin-resource-policy": "cross-origin",
+        "access-control-allow-credentials": "true"
+      },
+      "body_len": 19,
+      "body": "6035786084806848048"
+    },
+    {
+      "method": "GET",
+      "url": "https://vk.com/rtrg?p=VK-RTRG-1020733-bjynv&products_event=add_to_cart&price_list_id=148107&e=1&i=0&metatag_url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&metatag_title=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&products_params=%7B%22products%22%3A%5B%7B%22id%22%3A90844%2C%22price%22%3A148%2C%22price_old%22%3A185%7D%5D%2C%22currency_code%22%3A%22RUR%22%2C%22total_price%22%3A148%7D",
+      "status": 200,
+      "post": null,
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {
+        "x-frontend": "front920000",
+        "x-trace-id-v2": "019d95741bf274eaa4c7bcf4d8e9a7cb",
+        "access-control-expose-headers": "X-Frontend",
+        "content-encoding": "gzip",
+        "report-to": "{\"group\":\"default\",\"max_age\":86400,\"endpoints\":[{\"url\":\"https://akashi.vk-portal.net/api/v1/nel\"}],\"include_subdomains\":true}",
+        "server-timing": "tid;desc=\"NsgB37BBLGLvI-KkYDuBmDGw7Ue_4g\",front;dur=39.903",
+        "date": "Thu, 16 Apr 2026 08:41:47 GMT",
+        "content-type": "text/json; charset=UTF-8",
+        "strict-transport-security": "max-age=15768000",
+        "reporting-endpoints": "default=\"https://vk.com/browser_reports?dest=default_reports\"",
+        "cache-control": "no-store",
+        "nel": "{\"report_to\":\"default\",\"max_age\":86400,\"include_subdomains\":true,\"failure_fraction\":1.0}",
+        "access-control-allow-credentials": "true",
+        "x-trace-id": "NsgB37BBLGLvI-KkYDuBmDGw7Ue_4g",
+        "access-control-allow-origin": "https://vkusvill.ru",
+        "content-length": "31",
+        "x-powered-by": "KPHP/7.4.126418",
+        "server": "kittenx"
+      },
+      "body_len": 11,
+      "body": "{\"ok\":true}"
+    },
+    {
+      "method": "POST",
+      "url": "https://www.google.com/ccm/collect?rcb=17&frm=0&ae=g&en=page_view&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&scrsrc=www.googletagmanager.com&rnd=1302027351.1776328907&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&auid=314086964.1775810964&navt=n&npa=1&ep.ads_data_redaction=0&gtm=45He64e1v831460186za200zd831460186xea&gcd=13l3l3l2l1l1&dma_cps=a&dma=1&tag_exp=0~115616985~115938465~115938468~116363098~117266401~117884344&apve=1&apvf=f&apvc=1&tft=1776328906968&tfd=16800",
+      "status": 200,
+      "post": null,
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {},
+      "body_len": 0,
+      "body": ""
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "status": 200,
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Bcheck_id_element%5D=Y&arParams%5B0%5D%5Bid_tov%5D=90844&arParams%5B0%5D%5Bname_tov%5D=%D0%A2%D1%83%D0%BD%D0%B5%D1%86+(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)+%D1%84%D0%B8%D0%BB%D0%B5+%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C+140%C2%A0%D0%B3&arParams%5B0%5D%5Bid_element%5D=lk_lp&arParams%5B0%5D%5Baction%5D=addProductBasket&arParams%5B0%5D%5Bscreen_path%5D=%2Fpersonal%2F&arParams%5B0%5D%5Bbutton_name%5D=%D0%92+%D0%BA%D0%BE%D1%80%D0%B7%D0%B8%D0%BD%D1%83&arParams%5B0%5D%5Bposition%5D=1&arParams%5B0%5D%5BisFirst%5D=True&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resp_headers": {
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "content-security-policy": "frame-ancestors 'self';",
+        "cache-control": "no-store, no-cache, must-revalidate",
+        "pragma": "no-cache",
+        "x-content-type-options": "nosniff",
+        "x-powered-cms": "Bitrix Site Manager (5de1b67d7eb1a402262237b342f35055)",
+        "expires": "Thu, 19 Nov 1981 08:52:00 GMT",
+        "content-length": "0",
+        "p3p": "policyref=\"/bitrix/p3p.xml\", CP=\"NON DSP COR CUR ADM DEV PSA PSD OUR UNR BUS UNI COM NAV INT DEM STA\"",
+        "date": "Thu, 16 Apr 2026 08:41:48 GMT",
+        "content-type": "text/html; charset=UTF-8",
+        "vary": "HTTPS",
+        "server": "QRATOR",
+        "x-frame-options": "SAMEORIGIN, SAMEORIGIN"
+      },
+      "body_len": 0,
+      "body": ""
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98508068/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922121564168&hittoken=1776328907_9c01c48dc9658f3eb25938fc8092ee5c9efd5a9df68e9a709148bed488b85ccf&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A3%3Adp%3A1%3Als%3A1715010787547%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A681354369%3Arqn%3A29%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(5)aw(1)ecs(0)csu(0)cdl(na)eco(42271236)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjk%3D)ti(1)",
+      "status": 200,
+      "post": "site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22add%22%3A%7B%22products%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22id%22%3A90844%2C%22price%22%3A%22148%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22position%22%3A%221%22%2C%22quantity%22%3A1%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%2C%22actionField%22%3A%7B%7D%7D%2C%22currencyCode%22%3A%22RUB%22%7D%5D%7D%7D",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {
+        "strict-transport-security": "max-age=31536000",
+        "cache-control": "private, no-cache, no-store, must-revalidate, max-age=0",
+        "accept-ch": "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA, UA-Bitness, UA-Arch, UA-Full-Version, UA-Mobile, UA-Model, UA-Platform-Version, UA-Platform, UA",
+        "pragma": "no-cache",
+        "access-control-allow-credentials": "true",
+        "expires": "Thu, 16-Apr-2026 08:41:48 GMT",
+        "access-control-allow-origin": "https://vkusvill.ru",
+        "content-length": "43",
+        "x-xss-protection": "1; mode=block",
+        "last-modified": "Thu, 16-Apr-2026 08:41:48 GMT",
+        "content-type": "image/gif"
+      },
+      "body_len": 0,
+      "body": ""
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98436109/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922892791863&hittoken=1776328907_833ca8d2ea4ff2dce3195af351c737c68c83832102e689477af5e1a1b5ac103a&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A2%3Adp%3A1%3Als%3A928591476943%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A887721729%3Arqn%3A28%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(4)aw(1)ecs(0)csu(0)cdl(na)eco(42271492)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjksOTg1MDgwNjg6MDo3)ti(1)",
+      "status": 200,
+      "post": "site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22add%22%3A%7B%22products%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22id%22%3A90844%2C%22price%22%3A%22148%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22position%22%3A%221%22%2C%22quantity%22%3A1%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%2C%22actionField%22%3A%7B%7D%7D%2C%22currencyCode%22%3A%22RUB%22%7D%5D%7D%7D",
+      "req_headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resp_headers": {
+        "strict-transport-security": "max-age=31536000",
+        "cache-control": "private, no-cache, no-store, must-revalidate, max-age=0",
+        "pragma": "no-cache",
+        "accept-ch": "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA, UA-Bitness, UA-Arch, UA-Full-Version, UA-Mobile, UA-Model, UA-Platform-Version, UA-Platform, UA",
+        "access-control-allow-credentials": "true",
+        "expires": "Thu, 16-Apr-2026 08:41:48 GMT",
+        "access-control-allow-origin": "https://vkusvill.ru",
+        "content-length": "43",
+        "x-xss-protection": "1; mode=block",
+        "last-modified": "Thu, 16-Apr-2026 08:41:48 GMT",
+        "content-type": "image/gif"
+      },
+      "body_len": 0,
+      "body": ""
+    }
+  ],
+  "xhr_all_post": [
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=showBannerHeader&arParams%5B0%5D%5Bid_banner%5D=5775257&arParams%5B0%5D%5Bname_banner%5D=%D0%9E%D1%81%D1%82%D1%80%D0%BE%D1%83%D0%BC%D0%BD%D1%8B%D0%B9+%D1%81%D0%BE%D1%83%D1%81&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=showBannerLk&arParams%5B0%5D%5Bid_banner%5D=2620617&arParams%5B0%5D%5Bname_banner%5D=%D0%A1%D0%BA%D0%B8%D0%B4%D0%BA%D0%B8+%D0%BF%D0%BE%26nbsp%3B%D0%B2%D0%B0%D1%88%D0%B5%D0%B9+%D0%BA%D0%B0%D1%80%D1%82%D0%B5&arParams%5B1%5D%5Baction%5D=showBannerLk&arParams%5B1%5D%5Bid_banner%5D=2388571&arParams%5B1%5D%5Bname_banner%5D=%D0%9F%D1%80%D0%B8%D0%B3%D0%BB%D0%B0%D1%88%D0%B0%D0%B5%D0%BC+%D0%B2%26nbsp%3B%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D1%83&arParams%5B2%5D%5Baction%5D=showBannerLk&arParams%5B2%5D%5Bid_banner%5D=5773469&arParams%5B2%5D%5Bname_banner%5D=%D0%92%D0%B8%D1%88%D0%BD%D1%8F+%D0%B2%D1%87%D0%B8%D1%81%D1%82%D0%BE%D0%BC+%D0%B2%D0%B8%D0%B4%D0%B5&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=page_view&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/user_v2/cabinet/order_last_repeat_block.php",
+      "post": "sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "text/html, */*; q=0.01",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=showProfilePage&arParams%5B0%5D%5Bpage_type%5D=profile&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Baction%5D=ProfilePageVisit&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/user_v2/auth/change_old_token_to_new_tokens.php",
+      "post": "user_id=4021287",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "application/json, text/javascript, */*; q=0.01",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/delivery_order/basket_add.php",
+      "post": "id=90844&xmlid=90844&max=10&delivery_no_set=N&koef=1&step=1&coupon=&isExperiment=N&isOnlyOnline=&isGreen=0&user_id=4021287&skip_analogs=&is_app=&is_default_button=Y&cssInited=N&price_type=6",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "application/json, text/javascript, */*; q=0.01",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://eye.targetads.io/web/collect?dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&ref=&ul=en-us&ww=1280&wh=720&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&pid=12796&cid=6035786084806848048&yandexuid=&edttm=1776328906&sid=329804507&ss=1",
+      "post": "{\"event_name\":\"page_view\",\"ycid\":\"1774467377727014799\",\"gcid\":\"GA1.1.1779456938.1775810964\"}",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "text/plain",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://www.google.com/ccm/collect?rcb=17&frm=0&ae=g&en=page_view&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&scrsrc=www.googletagmanager.com&rnd=1302027351.1776328907&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&auid=314086964.1775810964&navt=n&npa=1&ep.ads_data_redaction=0&gtm=45He64e1v831460186za200zd831460186xea&gcd=13l3l3l2l1l1&dma_cps=a&dma=1&tag_exp=0~115616985~115938465~115938468~116363098~117266401~117884344&apve=1&apvf=f&apvc=1&tft=1776328906968&tfd=16800",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://vkusvill.ru/ajax/vvlog/log.php",
+      "post": "commonData%5Bref_url%5D=&commonData%5Bcur_url%5D=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&commonData%5Bcur_title%5D=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&commonData%5Bvl%5D=2&commonData%5Bscreen%5D=1280x720&commonData%5Bscreen_type%5D=desktop&commonData%5Bpage_type%5D=personal&commonData%5Bref_page_type%5D=&commonData%5Bref_title%5D=&commonData%5Bweb_view%5D=no&arParams%5B0%5D%5Bcheck_id_element%5D=Y&arParams%5B0%5D%5Bid_tov%5D=90844&arParams%5B0%5D%5Bname_tov%5D=%D0%A2%D1%83%D0%BD%D0%B5%D1%86+(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)+%D1%84%D0%B8%D0%BB%D0%B5+%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C+140%C2%A0%D0%B3&arParams%5B0%5D%5Bid_element%5D=lk_lp&arParams%5B0%5D%5Baction%5D=addProductBasket&arParams%5B0%5D%5Bscreen_path%5D=%2Fpersonal%2F&arParams%5B0%5D%5Bbutton_name%5D=%D0%92+%D0%BA%D0%BE%D1%80%D0%B7%D0%B8%D0%BD%D1%83&arParams%5B0%5D%5Bposition%5D=1&arParams%5B0%5D%5BisFirst%5D=True&sessid=bd79b1fb707ba980c45d4f9c58ff46c7",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      "resource_type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://eye.targetads.io/web/collect?dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&ref=&ul=en-us&ww=1280&wh=720&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9+%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&pid=12796&cid=6035786084806848048&yandexuid=&edttm=1776328907&sid=329804507",
+      "post": "{\"ecommerce_items\":{\"id\":[\"90844\"],\"title\":[\"Тунец (скипджек) филе в масле, 140 г\"],\"category1\":[\"Рыба, икра и морепродукты\"],\"category2\":[\"Рыбные консервы\"],\"brand\":[\"\"],\"variant\":[\"\"],\"quantity\":[1],\"price\":[148]},\"event_name\":\"add_to_cart\",\"ycid\":\"1774467377727014799\",\"gcid\":\"GA1.1.1779456938.1775810964\"}",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/personal/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "text/plain",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A637108656%3Arqn%3A62%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(2)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22promoView%22%3A%7B%22promotions%22%3A%5B%7B%22id%22%3A%22app_header_5775257%22%2C%22name%22%3A%22%D0%A0%D0%B0%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%B2%26nbsp%3B%D1%88%D0%B0%D0%BF%D0%BA%D0%B5%22%2C%22creative%22%3A%22app_header%22%2C%22position%22%3A%22header_5775257%22%7D%5D%7D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A387318358%3Arqn%3A63%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(3)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22impressions%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22id%22%3A90844%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&exp=P54lnS9LcLo%2C&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=ex%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A218892323%3Arqn%3A64%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(4)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)fid(650)ti(0)&force-urlencoded=1",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=goal%3A%2F%2Fvkusvill.ru%2FShowBannerHeader&page-ref=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=ar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A3%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A775537213%3Arqn%3A65%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(5)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=goal%3A%2F%2Fvkusvill.ru%2FBasketAddCommon&page-ref=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=ar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A3%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A700712376%3Arqn%3A66%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(6)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=goal%3A%2F%2Fvkusvill.ru%2FBasketAddFromOther&page-ref=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=ar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A3%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A873870455%3Arqn%3A67%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(7)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=goal%3A%2F%2Fvkusvill.ru%2FShopAuthedCatalogAddToBasket&page-ref=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=ar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A3%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A813774375%3Arqn%3A68%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(8)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/32501040/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041874410045448&hittoken=1776328907_8dca478c451824710613ec4c812ed9364759ab3e2179778861de72b1928b16f4&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A1%3Adp%3A1%3Als%3A1024199725389%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A199785976%3Arqn%3A69%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(9)aw(1)ecs(0)cdl(na)eco(42279684)w2s(0)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22add%22%3A%7B%22products%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22id%22%3A90844%2C%22price%22%3A%22148%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22position%22%3A%221%22%2C%22quantity%22%3A1%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%2C%22actionField%22%3A%7B%7D%7D%2C%22currencyCode%22%3A%22RUB%22%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98508068/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922121564168&hittoken=1776328907_9c01c48dc9658f3eb25938fc8092ee5c9efd5a9df68e9a709148bed488b85ccf&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A3%3Adp%3A1%3Als%3A1715010787547%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A780647898%3Arqn%3A26%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(2)aw(1)ecs(0)csu(0)cdl(na)eco(42271236)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjk%3D)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22promoView%22%3A%7B%22promotions%22%3A%5B%7B%22id%22%3A%22app_header_5775257%22%2C%22name%22%3A%22%D0%A0%D0%B0%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%B2%26nbsp%3B%D1%88%D0%B0%D0%BF%D0%BA%D0%B5%22%2C%22creative%22%3A%22app_header%22%2C%22position%22%3A%22header_5775257%22%7D%5D%7D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98508068/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922121564168&hittoken=1776328907_9c01c48dc9658f3eb25938fc8092ee5c9efd5a9df68e9a709148bed488b85ccf&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A3%3Adp%3A1%3Als%3A1715010787547%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A362125471%3Arqn%3A27%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(3)aw(1)ecs(0)csu(0)cdl(na)eco(42271236)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjk%3D)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22impressions%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22id%22%3A90844%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98508068/1?page-url=goal%3A%2F%2Fvkusvill.ru%2FBasketAddFromLKLP&page-ref=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922121564168&hittoken=1776328907_9c01c48dc9658f3eb25938fc8092ee5c9efd5a9df68e9a709148bed488b85ccf&browser-info=ar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A3%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A3%3Adp%3A1%3Als%3A1715010787547%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A634697151%3Arqn%3A28%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3App%3A3629563401%3Arqnl%3A1%3Ast%3A1776328908%3At%3A%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(4)aw(1)ecs(0)csu(0)cdl(na)eco(42271236)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjk%3D)ti(0)&force-urlencoded=1&site-info=%7B%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98508068/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922121564168&hittoken=1776328907_9c01c48dc9658f3eb25938fc8092ee5c9efd5a9df68e9a709148bed488b85ccf&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A3%3Adp%3A1%3Als%3A1715010787547%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A681354369%3Arqn%3A29%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(5)aw(1)ecs(0)csu(0)cdl(na)eco(42271236)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjk%3D)ti(1)",
+      "post": "site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22add%22%3A%7B%22products%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22id%22%3A90844%2C%22price%22%3A%22148%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22position%22%3A%221%22%2C%22quantity%22%3A1%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%2C%22actionField%22%3A%7B%7D%7D%2C%22currencyCode%22%3A%22RUB%22%7D%5D%7D%7D",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98436109/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922892791863&hittoken=1776328907_833ca8d2ea4ff2dce3195af351c737c68c83832102e689477af5e1a1b5ac103a&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A2%3Adp%3A1%3Als%3A928591476943%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A132913120%3Arqn%3A26%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(2)aw(1)ecs(0)csu(0)cdl(na)eco(42271492)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjksOTg1MDgwNjg6MDo3)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22promoView%22%3A%7B%22promotions%22%3A%5B%7B%22id%22%3A%22app_header_5775257%22%2C%22name%22%3A%22%D0%A0%D0%B0%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%B2%26nbsp%3B%D1%88%D0%B0%D0%BF%D0%BA%D0%B5%22%2C%22creative%22%3A%22app_header%22%2C%22position%22%3A%22header_5775257%22%7D%5D%7D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98436109/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922892791863&hittoken=1776328907_833ca8d2ea4ff2dce3195af351c737c68c83832102e689477af5e1a1b5ac103a&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A2%3Adp%3A1%3Als%3A928591476943%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A364625925%3Arqn%3A27%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(3)aw(1)ecs(0)csu(0)cdl(na)eco(42271492)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjksOTg1MDgwNjg6MDo3)ti(0)&force-urlencoded=1&site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22impressions%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22id%22%3A90844%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%7D%5D%7D%7D",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://mc.yandex.ru/watch/98436109/1?page-url=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&charset=utf-8&uah=chu%0A%22Not%3AA-Brand%22%3Bv%3D%2299%22%2C%22HeadlessChrome%22%3Bv%3D%22145%22%2C%22Chromium%22%3Bv%3D%22145%22%0Acha%0Ax86%0Achb%0A64%0Achf%0A145.0.7632.6%0Achl%0A%22Not%3AA-Brand%22%3Bv%3D%2299.0.0.0%22%2C%22HeadlessChrome%22%3Bv%3D%22145.0.7632.6%22%2C%22Chromium%22%3Bv%3D%22145.0.7632.6%22%0Achm%0A%3F0%0Achp%0AWindows%0Achv%0A10.0&hidv2=1956041922892791863&hittoken=1776328907_833ca8d2ea4ff2dce3195af351c737c68c83832102e689477af5e1a1b5ac103a&browser-info=pa%3A1%3Aar%3A1%3Avf%3A6glgxny3ywoixqvpwypw9eums2zmn%3Afu%3A0%3Aen%3Autf-8%3Ala%3Aen-US%3Av%3A2461%3Acn%3A2%3Adp%3A1%3Als%3A928591476943%3Ahid%3A873944357%3Az%3A-420%3Ai%3A20260416014147%3Aet%3A1776328908%3Ac%3A1%3Arn%3A887721729%3Arqn%3A28%3Au%3A1774467377727014799%3Aw%3A1280x720%3As%3A1280x720x24%3Ask%3A1%3Awv%3A2%3Aco%3A0%3Ahdl%3A1%3Antf%3A1%3Aeu%3A0%3Ans%3A1776328890168%3Agi%3AR0ExLjEuMTc3OTQ1NjkzOC4xNzc1ODEwOTY0%3Arqnl%3A1%3Ast%3A1776328908&t=gdpr(14)mc(p-9-ex-1-g-5)clc(0-0-0)rqnt(4)aw(1)ecs(0)csu(0)cdl(na)eco(42271492)prs(2)wss(1)w2s(0)evs(MzI1MDEwNDA6MDo3LDMyNTAxMDQwOjA6OCwzMjUwMTA0MDowOjksOTg1MDgwNjg6MDo3)ti(1)",
+      "post": "site-info=%7B%22__ym%22%3A%7B%22ecommerce%22%3A%5B%7B%22add%22%3A%7B%22products%22%3A%5B%7B%22name%22%3A%22%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3%22%2C%22id%22%3A90844%2C%22price%22%3A%22148%22%2C%22list%22%3A%22%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%22%2C%22position%22%3A%221%22%2C%22quantity%22%3A1%2C%22category%22%3A%22%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B%2F%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B%22%7D%5D%2C%22actionField%22%3A%7B%7D%7D%2C%22currencyCode%22%3A%22RUB%22%7D%5D%7D%7D",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&_gaz=1&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=EAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=1&tag_exp=0~115938465~115938468~116363098~117266400~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=page_view&_ss=1&tfd=20060",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-YJMLVXQQNQ&cid=1779456938.1775810964&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&rcb=18&aip=1&dma=1&dma_cps=a&gcd=13l3lPl2l1l1&npa=1&frm=0&tag_exp=0~115938465~115938468~116363098~117266400~118131809",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "ping"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=2&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&cu=RUB&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=view_item_list&pr1=nm%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3~ln%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82~id90844~ca%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B~c2%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B&_et=48&tfd=20118",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=3&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=view_promotion&_c=1&ep.promotion_id=app_header_5775257&ep.promotion_name=%D0%A0%D0%B0%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%B2%26nbsp%3B%D1%88%D0%B0%D0%BF%D0%BA%D0%B5&ep.creative_name=app_header&ep.creative_slot=header_5775257&_et=1&tfd=20119",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=4&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=view_promotion&_c=1&ep.promotion_id=lk_bn_5773469&ep.promotion_name=%D0%91%D0%B0%D0%BD%D0%BD%D0%B5%D1%80%20%D0%9B%D0%9A&ep.creative_name=lk_bn&ep.creative_slot=lk_bn_5773469&_et=2&tfd=20125",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=5&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=view_promotion&_c=1&ep.promotion_id=lk_bn_5773469&ep.promotion_name=%D0%91%D0%B0%D0%BD%D0%BD%D0%B5%D1%80%20%D0%9B%D0%9A&ep.creative_name=lk_bn&ep.creative_slot=lk_bn_5773469&_et=2&tfd=20130",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=6&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=view_promotion&_c=1&ep.promotion_id=lk_bn_5773469&ep.promotion_name=%D0%91%D0%B0%D0%BD%D0%BD%D0%B5%D1%80%20%D0%9B%D0%9A&ep.creative_name=lk_bn&ep.creative_slot=lk_bn_5773469&_et=2&tfd=20138",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=EAAAAGQ&are=1&cid=1779456938.1775810964&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=7&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=UserID&ep.UserID=9592053&_et=3&tfd=20149",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    },
+    {
+      "method": "POST",
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-YJMLVXQQNQ&gtm=45je64e1v9107572194z8831460186za20gzb831460186zd831460186&_p=1776328904809&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&ecid=1856033882&_eu=MAAAAGQ&are=1&cid=1779456938.1775810964&ec_mode=a&frm=0&ir=1&pscdl=noapi&rcb=18&sr=1280x720&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0&uaw=0&ul=en-us&gaf=2&_s=8&tag_exp=0~115938465~115938468~116363098~117266400~117971173~118131809&cu=RUB&sid=1776328910&sct=2&seg=0&dl=https%3A%2F%2Fvkusvill.ru%2Fpersonal%2F&dt=%D0%9B%D0%B8%D1%87%D0%BD%D1%8B%D0%B9%20%D0%BA%D0%B0%D0%B1%D0%B8%D0%BD%D0%B5%D1%82&en=add_to_cart&_c=1&pr1=nm%D0%A2%D1%83%D0%BD%D0%B5%D1%86%20(%D1%81%D0%BA%D0%B8%D0%BF%D0%B4%D0%B6%D0%B5%D0%BA)%20%D1%84%D0%B8%D0%BB%D0%B5%20%D0%B2%C2%A0%D0%BC%D0%B0%D1%81%D0%BB%D0%B5%2C%20140%C2%A0%D0%B3~id90844~pr148~ln%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B9%20%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82~lp1~qt1~ca%D0%A0%D1%8B%D0%B1%D0%B0%2C%20%D0%B8%D0%BA%D1%80%D0%B0%20%D0%B8%C2%A0%D0%BC%D0%BE%D1%80%D0%B5%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D1%8B~c2%D0%A0%D1%8B%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%BA%D0%BE%D0%BD%D1%81%D0%B5%D1%80%D0%B2%D1%8B&_et=2&tfd=20150",
+      "post": null,
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "https://vkusvill.ru/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "resource_type": "fetch"
+    }
+  ]
+}

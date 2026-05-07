@@ -69,6 +69,10 @@ class Settings:
     telegram_proxy_url: str | None
     collection_times: list[time]
     morning_audit_times: list[time]
+    order_window_open_time: time
+    order_window_open_message: str
+    order_window_close_time: time
+    order_window_close_message: str
     order_deadline: time
     provider: str
     discounts_json_path: str
@@ -90,6 +94,14 @@ class Settings:
     collect_timeout_sec: int
     order_executor_timeout_sec: int
     collect_min_items: int = 10
+    http_json_url: str | None = None
+    http_api_state_file: str = "data/vkusvill_storage_state.json"
+    http_api_waves: int = 3
+    http_api_proxy: str | None = None
+    mobile_api_token_file: str = "data/mobile_tokens.json"
+    mobile_api_proxy: str | None = None
+    mobile_api_device_id: str = ""
+    onboard_password: str = ""
 
 
 def load_settings() -> Settings:
@@ -108,6 +120,10 @@ def load_settings() -> Settings:
         telegram_proxy_url=telegram_proxy_url,
         collection_times=_parse_collection_times(os.getenv("COLLECTION_TIMES")),
         morning_audit_times=_parse_collection_times(os.getenv("MORNING_AUDIT_TIMES", "09:00,10:00,11:00")),
+        order_window_open_time=_parse_clock(os.getenv("ORDER_WINDOW_OPEN_TIME", "09:00")),
+        order_window_open_message=os.getenv("ORDER_WINDOW_OPEN_MESSAGE", "Го заказывать. Сегодняшний срез уже готов.").strip(),
+        order_window_close_time=_parse_clock(os.getenv("ORDER_WINDOW_CLOSE_TIME", "11:00")),
+        order_window_close_message=os.getenv("ORDER_WINDOW_CLOSE_MESSAGE", "Лавочка закрыта на сегодня.").strip(),
         order_deadline=_parse_clock(os.getenv("ORDER_DEADLINE", "19:30")),
         provider=os.getenv("PROVIDER", "manual_json").strip().lower(),
         discounts_json_path=os.getenv("DISCOUNTS_JSON_PATH", "data/today_discounts.json"),
@@ -129,4 +145,12 @@ def load_settings() -> Settings:
         collect_timeout_sec=_parse_positive_int(os.getenv("COLLECT_TIMEOUT_SEC"), 180),
         order_executor_timeout_sec=_parse_positive_int(os.getenv("ORDER_EXECUTOR_TIMEOUT_SEC"), 180),
         collect_min_items=_parse_positive_int(os.getenv("COLLECT_MIN_ITEMS"), 10),
+        http_json_url=(os.getenv("HTTP_JSON_URL") or "").strip() or None,
+        http_api_state_file=os.getenv("HTTP_API_STATE_FILE", "data/vkusvill_storage_state.json"),
+        http_api_waves=_parse_positive_int(os.getenv("HTTP_API_WAVES"), 3),
+        http_api_proxy=(os.getenv("HTTP_API_PROXY") or "").strip() or None,
+        mobile_api_token_file=os.getenv("MOBILE_API_TOKEN_FILE", "data/mobile_tokens.json"),
+        mobile_api_proxy=(os.getenv("MOBILE_API_PROXY") or "").strip() or None,
+        mobile_api_device_id=(os.getenv("MOBILE_API_DEVICE_ID") or "").strip(),
+        onboard_password=(os.getenv("ONBOARD_PASSWORD") or "").strip(),
     )

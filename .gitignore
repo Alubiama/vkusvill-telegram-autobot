@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Bot runtime data — contains tokens, cookies, SQLite state
+data/
+
+# Output / logs
+out/
+*.log
+*.pid
+
+# Working copy used by scripts/publish_pages.sh
+.pages-checkout/
+
+# Syncthing artifacts
+*.sync-conflict-*
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
