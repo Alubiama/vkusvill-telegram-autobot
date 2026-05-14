@@ -830,8 +830,13 @@
     function loadLatestPayloadSync() {
       const groupId = String(params.get("group") || "").trim();
       const candidates = [];
-      if (groupId) candidates.push(`./groups/${encodeURIComponent(groupId)}/latest.json`);
-      candidates.push(`./latest.json`);
+      if (groupId) {
+        // Per-group view: never fall back to primary latest.json,
+        // doing so would show another tenant's discounts.
+        candidates.push(`./groups/${encodeURIComponent(groupId)}/latest.json`);
+      } else {
+        candidates.push(`./latest.json`);
+      }
       const stamp = Date.now();
       for (const url of candidates) {
         try {
